@@ -1,0 +1,355 @@
+{
+  "scenario_id": "7day",
+  "title": "Emergency Response: First Week",
+  "narrative": "Seven days on duty in the Regional Emergency Coordination zone. The Supply Van is in the shop until hour 60, so the Ambulance and the Rescue Truck cover everything alone — including the Sunrise Care Home, eight hours out on Main Street, which must be visited every 24 hours or two residents are lost. On day two the ridge and the cabins demand the fast ambulance inside four hours while a care tick is running. Everything you need to learn the API is here — the 90-day judging scenario follows the same rules.",
+  "horizon_hours": 168,
+  "locations": [
+    {
+      "id": "LOC-1",
+      "name": "Community Hall",
+      "kind": "town"
+    },
+    {
+      "id": "LOC-2",
+      "name": "Sunrise Care Home",
+      "kind": "care"
+    },
+    {
+      "id": "LOC-3",
+      "name": "Mobile Home Park",
+      "kind": "residential"
+    },
+    {
+      "id": "LOC-4",
+      "name": "Highway Depot",
+      "kind": "depot"
+    },
+    {
+      "id": "LOC-5",
+      "name": "Riverside Cabins",
+      "kind": "residential"
+    },
+    {
+      "id": "LOC-6",
+      "name": "East Ridge",
+      "kind": "rural"
+    }
+  ],
+  "roads": [
+    {
+      "id": "RD-1",
+      "name": "Main Street",
+      "from_location_id": "LOC-1",
+      "to_location_id": "LOC-2",
+      "hours": 8,
+      "status": "open"
+    },
+    {
+      "id": "RD-2",
+      "name": "Depot Road",
+      "from_location_id": "LOC-4",
+      "to_location_id": "LOC-1",
+      "hours": 3,
+      "status": "open"
+    },
+    {
+      "id": "RD-3",
+      "name": "Ridge Highway",
+      "from_location_id": "LOC-1",
+      "to_location_id": "LOC-6",
+      "hours": 5,
+      "status": "open"
+    },
+    {
+      "id": "RD-4",
+      "name": "Mobile Lane",
+      "from_location_id": "LOC-1",
+      "to_location_id": "LOC-3",
+      "hours": 2,
+      "status": "open"
+    },
+    {
+      "id": "RD-5",
+      "name": "Riverside Drive",
+      "from_location_id": "LOC-3",
+      "to_location_id": "LOC-5",
+      "hours": 3,
+      "status": "open"
+    },
+    {
+      "id": "RD-6",
+      "name": "Ridge Bypass",
+      "from_location_id": "LOC-2",
+      "to_location_id": "LOC-6",
+      "hours": 8,
+      "status": "open"
+    },
+    {
+      "id": "RD-7",
+      "name": "Cabin Road",
+      "from_location_id": "LOC-2",
+      "to_location_id": "LOC-5",
+      "hours": 8,
+      "status": "open"
+    },
+    {
+      "id": "RD-8",
+      "name": "Valley Road",
+      "from_location_id": "LOC-4",
+      "to_location_id": "LOC-6",
+      "hours": 6,
+      "status": "open"
+    }
+  ],
+  "vehicles": [
+    {
+      "id": "VEH-AMB",
+      "name": "Ambulance",
+      "speed": 1.25,
+      "location_id": "LOC-1",
+      "status": "available"
+    },
+    {
+      "id": "VEH-RES",
+      "name": "Rescue Truck",
+      "speed": 1.0,
+      "location_id": "LOC-4",
+      "status": "available"
+    },
+    {
+      "id": "VEH-SUP",
+      "name": "Supply Van",
+      "speed": 1.0,
+      "location_id": "LOC-4",
+      "status": "out_of_service"
+    }
+  ],
+  "chronic": {
+    "name": "Sunrise Care Home",
+    "location_id": "LOC-2",
+    "interval_hours": 24,
+    "loss_per_tick": 2,
+    "initial_people": 12
+  },
+  "events": [
+    {
+      "time": 0,
+      "type": "incident",
+      "data": {
+        "id": "INC-001",
+        "title": "Mobile home park fire",
+        "description": "A unit is fully involved; neighbours report residents still inside.",
+        "location_id": "LOC-3",
+        "people_at_risk": 6,
+        "deadline_offset_hours": 10
+      }
+    },
+    {
+      "time": 0,
+      "type": "incident",
+      "data": {
+        "id": "INC-002",
+        "title": "River trail injury",
+        "description": "A hiker has a serious fall on the riverside trail and cannot self-evacuate.",
+        "location_id": "LOC-5",
+        "people_at_risk": 4,
+        "deadline_offset_hours": 12
+      }
+    },
+    {
+      "time": 0,
+      "type": "incident",
+      "data": {
+        "id": "INC-003",
+        "title": "Cabin flooding",
+        "description": "River rise has put two cabins under water with occupants ashore but stranded.",
+        "location_id": "LOC-5",
+        "people_at_risk": 5,
+        "deadline_offset_hours": 16
+      }
+    },
+    {
+      "time": 18,
+      "type": "incident",
+      "data": {
+        "id": "INC-004",
+        "title": "Care home outbreak",
+        "description": "A gastroenterology outbreak is spreading through Sunrise Care Home.",
+        "location_id": "LOC-2",
+        "people_at_risk": 8,
+        "deadline_offset_hours": 8
+      }
+    },
+    {
+      "time": 20,
+      "type": "incident",
+      "data": {
+        "id": "INC-005",
+        "title": "Market hall gas leak",
+        "description": "A fitting went in the hall market; the building is being cleared.",
+        "location_id": "LOC-1",
+        "people_at_risk": 3,
+        "deadline_offset_hours": 8
+      }
+    },
+    {
+      "time": 38,
+      "type": "incident",
+      "data": {
+        "id": "INC-006",
+        "title": "Ridge cabin fire",
+        "description": "A rental cabin is fully involved with guests unaccounted for. Only the fast ambulance can make the ridge in time.",
+        "location_id": "LOC-6",
+        "people_at_risk": 10,
+        "deadline_offset_hours": 4
+      }
+    },
+    {
+      "time": 40,
+      "type": "incident",
+      "data": {
+        "id": "INC-007",
+        "title": "Gas leak, Riverside Cabins",
+        "description": "A line break is venting under the cabin strip; the whole block must clear.",
+        "location_id": "LOC-5",
+        "people_at_risk": 7,
+        "deadline_offset_hours": 6
+      }
+    },
+    {
+      "time": 42,
+      "type": "incident",
+      "data": {
+        "id": "INC-008",
+        "title": "Mobile park pile-up",
+        "description": "A multi-vehicle collision blocks Mobile Lane with injuries.",
+        "location_id": "LOC-3",
+        "people_at_risk": 8,
+        "deadline_offset_hours": 8
+      }
+    },
+    {
+      "time": 54,
+      "type": "road_status",
+      "data": {
+        "road_id": "RD-3",
+        "status": "restricted",
+        "reason": "wildfire smoke — single lane"
+      }
+    },
+    {
+      "time": 54,
+      "type": "road_status",
+      "data": {
+        "road_id": "RD-2",
+        "status": "restricted",
+        "reason": "washout repairs"
+      }
+    },
+    {
+      "time": 60,
+      "type": "vehicle_status",
+      "data": {
+        "vehicle_id": "VEH-SUP",
+        "status": "available",
+        "reason": "supply crew reported for duty"
+      }
+    },
+    {
+      "time": 70,
+      "type": "incident",
+      "data": {
+        "id": "INC-009",
+        "title": "East Ridge structure collapse",
+        "description": "A slope failure has taken out a block of housing on the ridge; access is degraded.",
+        "location_id": "LOC-6",
+        "people_at_risk": 12,
+        "deadline_offset_hours": 14
+      }
+    },
+    {
+      "time": 88,
+      "type": "incident",
+      "data": {
+        "id": "INC-010",
+        "title": "Riverside wildfire evacuation",
+        "description": "Fire has jumped the river; the cabin strip must be cleared immediately.",
+        "location_id": "LOC-5",
+        "people_at_risk": 9,
+        "deadline_offset_hours": 10
+      }
+    },
+    {
+      "time": 100,
+      "type": "vehicle_status",
+      "data": {
+        "vehicle_id": "VEH-AMB",
+        "status": "out_of_service",
+        "reason": "mechanical failure"
+      }
+    },
+    {
+      "time": 120,
+      "type": "road_status",
+      "data": {
+        "road_id": "RD-3",
+        "status": "open",
+        "reason": "repairs complete"
+      }
+    },
+    {
+      "time": 120,
+      "type": "road_status",
+      "data": {
+        "road_id": "RD-2",
+        "status": "open",
+        "reason": "repairs complete"
+      }
+    },
+    {
+      "time": 124,
+      "type": "vehicle_status",
+      "data": {
+        "vehicle_id": "VEH-AMB",
+        "status": "available",
+        "reason": "tow and repair complete"
+      }
+    },
+    {
+      "time": 130,
+      "type": "incident",
+      "data": {
+        "id": "INC-011",
+        "title": "Derailment at the mobile park",
+        "description": "A freight train has derailed into the edge of the park; cars are venting.",
+        "location_id": "LOC-3",
+        "people_at_risk": 9,
+        "deadline_offset_hours": 10
+      }
+    },
+    {
+      "time": 134,
+      "type": "incident",
+      "data": {
+        "id": "INC-012",
+        "title": "Ridge house fire",
+        "description": "A ridge house is fully involved with reports of occupants.",
+        "location_id": "LOC-6",
+        "people_at_risk": 8,
+        "deadline_offset_hours": 10
+      }
+    },
+    {
+      "time": 150,
+      "type": "incident",
+      "data": {
+        "id": "INC-013",
+        "title": "Care home pipe burst",
+        "description": "A burst main is flooding the care home's ground floor.",
+        "location_id": "LOC-2",
+        "people_at_risk": 7,
+        "deadline_offset_hours": 12
+      }
+    }
+  ]
+}
