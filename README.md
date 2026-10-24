@@ -33,7 +33,8 @@ Use `python3` instead of `python` on macOS and Linux.
 
        python -m dashboard --engine-port 8600
 
-   Start it before the planner to watch the run as it happens. The
+   Start it before the planner, and run the planner with `--pace 0.2`, to
+   watch the run as it happens. The
    **Live** tab reads the engine once a second and shows the newest
    planner decisions as they are written. The **Replay a run** tab opens
    any finished log in `runs/`. You can also open `dashboard/index.html`
@@ -78,12 +79,13 @@ engine refused an action; the planner logs it and replans next round.
 | `--scenario NAME` | none | Reset the engine to this scenario before running |
 | `--reset` | off | Reset the engine to its current scenario |
 | `--profile NAME` | the most complete one | Strategy profile; `--help` lists them |
+| `--pace SECONDS` | `0` | Pause after each step so the live dashboard can be watched; `0.2` makes a 7-day run take about 15 seconds |
 | `--log-dir DIR` | `runs/` | Where the decision log goes (`''` turns it off) |
 | `--quiet` | off | Print only the final summary |
 | `--no-events` | off | Hide engine events between decisions |
 
-Each option except the last three can also be set with an environment
-variable: `REC_HOST`, `REC_PORT`, `REC_SCENARIO`, `REC_PROFILE`.
+These can also be set with environment variables: `REC_HOST`, `REC_PORT`,
+`REC_SCENARIO`, `REC_PROFILE`, `REC_PACE`.
 
 ## Test it
 

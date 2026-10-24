@@ -3,7 +3,7 @@
     python -m solutions.planner --port 8600 --scenario 7day --profile full
 
 Every setting can also come from the environment (REC_HOST, REC_PORT,
-REC_SCENARIO, REC_PROFILE), so nothing needs a code edit.
+REC_SCENARIO, REC_PROFILE, REC_PACE), so nothing needs a code edit.
 
 Loop per decision round:
     GET /state -> strategy.decide() -> POST each action -> POST /advance
@@ -78,7 +78,10 @@ def apply_action(client, planner: Planner, log: DecisionLog, clock: int,
     return res
 
 
-def run(client, planner: Planner, log: DecisionLog, label: str = "planner") -> dict | None:
+def run(client, planner: Planner, log: DecisionLog, label: str = "planner",
+        pace: float = 0.0) -> dict | None:
+    """Play the scenario to the horizon. `pace` sleeps that many seconds after
+    each advance so a live dashboard can follow the run (0 = full speed)."""
     state = _retry(client.state)
     if state["clock"] >= state["horizon_hours"]:
         print(f"[{label}] engine is already at the horizon (hour {state['clock']}); "
@@ -125,6 +128,8 @@ def run(client, planner: Planner, log: DecisionLog, label: str = "planner") -> d
             if out["clock"] <= clock:
                 log.decision(clock, "ERROR", None, None, "engine clock will not advance; stopping")
                 break
+        if pace > 0:
+            time.sleep(pace)
         state = _retry(client.state)
 
     echo_events(state)
@@ -146,6 +151,9 @@ def main(argv: list[str] | None = None) -> int:
                     help=f"strategy profile (default: {PROFILES[-1]})")
     ap.add_argument("--log-dir", default=str(ROOT / "runs"),
                     help="where the JSONL decision log is written ('' to disable)")
+    ap.add_argument("--pace", type=float, default=float(env("REC_PACE", "0")),
+                    help="seconds to pause after each advance, so the live dashboard "
+                         "can be watched (default 0 = full speed)")
     ap.add_argument("--quiet", action="store_true", help="only print the final summary")
     ap.add_argument("--no-events", action="store_true",
                     help="hide engine events between decisions on stdout")
@@ -173,7 +181,8 @@ def main(argv: list[str] | None = None) -> int:
     log = DecisionLog(path, quiet=args.quiet, show_events=not args.no_events)
     planner = Planner(args.profile, log)
     try:
-        report = run(client, planner, log, label=f"{scenario}/{args.profile}")
+        report = run(client, planner, log, label=f"{scenario}/{args.profile}",
+                     pace=max(0.0, args.pace))
     except KeyboardInterrupt:
         print("\ninterrupted - engine left as is; re-run with --reset to start over",
               file=sys.stderr)
