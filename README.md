@@ -29,13 +29,15 @@ Use `python3` instead of `python` on macOS and Linux.
    Every decision is printed with its reason and also saved to
    `runs/<scenario>_<profile>_<time>.jsonl`.
 
-3. In a third terminal, open the dashboard to see the run:
+3. In a third terminal, start the dashboard and open http://127.0.0.1:8700:
 
-       python -m dashboard.serve
+       python -m dashboard --engine-port 8600
 
-   Then go to http://127.0.0.1:8700. It lists every log in `runs/`, newest
-   first. You can also open `dashboard/index.html` straight from disk and
-   drop a `.jsonl` file onto it.
+   Start it before the planner to watch the run as it happens. The
+   **Live** tab reads the engine once a second and shows the newest
+   planner decisions as they are written. The **Replay a run** tab opens
+   any finished log in `runs/`. You can also open `dashboard/index.html`
+   straight from disk and drop a `.jsonl` file onto it.
 
 For judging, use `--scenario 90day`. The API and the planner are the same.
 
@@ -106,9 +108,30 @@ server, and prints one row per scenario and profile. Every row must say
 | `solutions/client.py` | The organisers' HTTP client |
 | `tools/bench.py` | Offline comparison of profiles across scenarios |
 | `tools/local_engine.py` | In-process stand-in for the HTTP engine |
-| `dashboard/` | Run dashboard: `index.html` and the `serve.py` that serves it |
+| `dashboard/` | Live and replay dashboard: `index.html` and the `serve.py` that serves it |
 
 ## Reading the dashboard
+
+Dashboard options: `--port` (default 8700), `--engine-host` and
+`--engine-port` (where the engine is, default 127.0.0.1:8600), and `--runs`
+(the log folder, default `runs/`).
+
+### Live
+
+- **Clock:** day and hour, with progress through the scenario.
+- **Score so far:** people saved out of everyone at risk so far, incident
+  saves and misses, care-home residents alive, and open incidents.
+- **Vehicles:** status, where each one is, and for a vehicle on a trip,
+  where it is going and when it arrives.
+- **Care home:** residents left, the last visit, the next tick, and whether
+  the current window is covered, has a vehicle on the way, or still needs
+  one.
+- **Open incidents:** most urgent first, with hours left before the deadline
+  and the vehicle responding.
+- **Latest planner decisions:** the last 30 decisions with their reasons,
+  plus missed deadlines and care-home losses.
+
+### Replay a run
 
 - **Summary tiles:** people saved out of everyone at risk (the headline
   score), incident saves, care-home residents still alive, and how many

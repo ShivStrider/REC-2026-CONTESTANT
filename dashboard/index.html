@@ -99,6 +99,36 @@ tbody tr:hover td { background: var(--grid); }
 .drop.over { border-color: var(--accent); color: var(--fg); }
 .error { color: var(--bad); }
 .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 24px; }
+.view { display: grid; gap: 24px; }
+.tabs { display: flex; gap: 6px; }
+.tabs button { font-weight: 600; padding: 8px 16px; }
+.tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.replay-head { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; }
+.replay-title { font-size: 20px; }
+/* live view: sized for a projector */
+#liveView { font-size: 16px; }
+.live-head { gap: 10px; }
+.live-row { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; justify-content: space-between; }
+.live-status { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.done { background: var(--accent); }
+.live-clock { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.progress { height: 10px; background: var(--grid); border-radius: 999px; overflow: hidden; }
+.progress > div { height: 100%; width: 0; background: var(--accent); border-radius: 999px; }
+.vgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+.vcard { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.vcard .vname { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; flex-wrap: wrap; }
+.vcard .vname b { font-size: 16px; }
+.vcard .line { font-size: 14px; overflow-wrap: anywhere; }
+.mini { height: 6px; background: var(--grid); border-radius: 999px; overflow: hidden; }
+.mini > div { height: 100%; background: var(--incident); }
+.pill.busy { color: var(--incident); }
+.care-big { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.care-big small { font-size: 16px; color: var(--muted); font-weight: 500; }
+.care-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; font-size: 15px; }
+.care-facts dt { color: var(--muted); }
+.care-facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+td.left-bad { color: var(--bad); font-weight: 700; } td.left-warn { color: var(--warn); font-weight: 600; }
 @media (max-width: 560px) { .row { grid-template-columns: 1fr; gap: 2px; } }
 </style>
 </head>
@@ -107,7 +137,62 @@ tbody tr:hover td { background: var(--grid); }
   <header class="top">
     <div>
       <div class="eyebrow">REC 2026 · Emergency Response</div>
-      <h1 id="title">Run dashboard</h1>
+      <h1>Dispatch dashboard</h1>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Views">
+      <button type="button" role="tab" id="tab-live" data-view="live" aria-selected="true">Live</button>
+      <button type="button" role="tab" id="tab-replay" data-view="replay" aria-selected="false">Replay a run</button>
+    </nav>
+  </header>
+
+  <!-- ================================================================ live -->
+  <div id="liveView" class="view">
+    <section class="panel live-head">
+      <div class="live-row">
+        <div class="live-status"><span class="dot" id="liveDot"></span><span id="liveStatus">Connecting to the engine...</span></div>
+        <div class="muted mono" id="liveScenario"></div>
+      </div>
+      <div class="live-row">
+        <div class="live-clock"><span id="liveDay">Day -</span> <span class="muted mono" id="liveHour"></span></div>
+        <div class="muted mono" id="liveLeft"></div>
+      </div>
+      <div class="progress" aria-hidden="true"><div id="liveBar"></div></div>
+    </section>
+
+    <section class="tiles" id="liveTiles" aria-label="Score so far"></section>
+
+    <div class="two">
+      <section class="panel">
+        <div class="panel-head"><h2>Vehicles</h2></div>
+        <div class="vgrid" id="liveVehicles"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>Care home</h2></div>
+        <div id="liveCare"></div>
+      </section>
+    </div>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Open incidents</h2><span class="muted" id="liveIncNote"></span></div>
+      <div class="scroll">
+        <table id="liveInc">
+          <thead><tr><th>Incident</th><th>Location</th><th class="num">People</th><th class="num">Deadline</th><th class="num">Time left</th><th>Responder</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Latest planner decisions</h2><span class="muted mono" id="liveLogName"></span></div>
+      <div class="feed" id="liveFeed"></div>
+    </section>
+  </div>
+
+  <!-- ============================================================== replay -->
+  <div id="replayView" class="view" hidden>
+  <div class="replay-head">
+    <div>
+      <h2 id="title" class="replay-title">Replay a run</h2>
       <div class="muted" id="subtitle">Open a decision log from <code>runs/</code> to see how the planner played it.</div>
     </div>
     <div class="picker">
@@ -116,7 +201,7 @@ tbody tr:hover td { background: var(--grid); }
       <button type="button" id="openBtn">Open .jsonl file</button>
       <input type="file" id="fileInput" accept=".jsonl,.json,.txt" hidden>
     </div>
-  </header>
+  </div>
 
   <div id="empty" class="drop">
     <strong>Drop a decision log here</strong>
@@ -180,6 +265,7 @@ tbody tr:hover td { background: var(--grid); }
         <div class="feed" id="feed"></div>
       </section>
     </div>
+  </div>
   </div>
 </div>
 
@@ -637,7 +723,7 @@ async function loadServed(name) {
 
 function readFile(file) {
   const fr = new FileReader();
-  fr.onload = () => loadText(String(fr.result), file.name);
+  fr.onload = () => { showView("replay"); loadText(String(fr.result), file.name); };
   fr.onerror = () => { document.getElementById("loadError").textContent = `Could not read ${file.name}.`; };
   fr.readAsText(file);
 }
@@ -653,6 +739,203 @@ document.addEventListener("drop", e => { const f = e.dataTransfer && e.dataTrans
 let resizeTimer = null;
 window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (run) { renderTimeline(); renderChart(); } }, 150); });
 if (window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (run) { renderTimeline(); renderChart(); renderCounts(); } });
+
+// ---------------------------------------------------------------- live view
+
+const DEFAULT_ENGINE = "http://127.0.0.1:8600";
+const FEED_SIZE = 30;
+let engineUrl = null, liveTimer = null, liveBusy = false;
+let liveFile = "", liveNext = 0, liveRecs = [], liveState = null;
+
+async function getJson(url, ms = 2500) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try {
+    const res = await fetch(url, { signal: ctl.signal, cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } finally { clearTimeout(t); }
+}
+
+async function startLive() {
+  if (liveTimer) return;
+  if (!engineUrl) {
+    engineUrl = DEFAULT_ENGINE;
+    if (location.protocol !== "file:") {
+      try { engineUrl = (await getJson("api/config")).engine || DEFAULT_ENGINE; } catch (e) { /* keep default */ }
+    }
+  }
+  tickLive();
+  liveTimer = setInterval(tickLive, 1000);
+}
+function stopLive() { clearInterval(liveTimer); liveTimer = null; }
+
+async function tickLive() {
+  if (liveBusy) return;
+  liveBusy = true;
+  try {
+    const [st, rep] = await Promise.all([getJson(engineUrl + "/state"), getJson(engineUrl + "/report")]);
+    liveState = st.state;
+    renderLive(st.state, rep.report);
+  } catch (e) {
+    setLiveStatus("bad", `No engine at ${engineUrl}. Start it with: python -m engine.server --scenario 7day --port ${engineUrl.split(":").pop()}`);
+  }
+  if (location.protocol !== "file:") {
+    try { await pullDecisions(); } catch (e) { /* decisions are optional */ }
+  } else {
+    document.getElementById("liveLogName").textContent = "start python -m dashboard to see planner decisions";
+  }
+  liveBusy = false;
+}
+
+function setLiveStatus(kind, text) {
+  document.getElementById("liveDot").className = "dot " + kind;
+  document.getElementById("liveStatus").textContent = text;
+}
+
+async function pullDecisions() {
+  const data = await getJson(`decisions?file=${encodeURIComponent(liveFile)}&since=${liveNext}`);
+  if (data.reset) liveRecs = [];
+  liveFile = data.file || "";
+  liveNext = data.next || 0;
+  liveRecs.push(...data.records);
+  if (liveRecs.length > 600) liveRecs = liveRecs.slice(-600);
+  renderLiveFeed();
+}
+
+function renderLive(st, rep) {
+  const lname = {};
+  st.locations.forEach(l => { lname[l.id] = l.name; });
+  const vname = {};
+  st.vehicles.forEach(v => { vname[v.id] = v.name; });
+  const loc = id => lname[id] ? `${lname[id]} (${id})` : (id || "");
+  const clock = st.clock, H = st.horizon_hours, days = H / 24;
+  const finished = clock >= H;
+
+  setLiveStatus(finished ? "done" : "ok", finished ? "Run finished" : "Live, updating every second");
+  document.getElementById("liveScenario").textContent = `${st.title || st.scenario_id} · ${st.scenario_id}`;
+  document.getElementById("liveDay").textContent = `Day ${Math.min(st.day, days)} of ${days}`;
+  document.getElementById("liveHour").textContent = `${hh(clock)} of ${hh(H)}`;
+  document.getElementById("liveLeft").textContent = finished ? "final score below" : `${H - clock}h to go`;
+  document.getElementById("liveBar").style.width = `${Math.min(100, 100 * clock / H)}%`;
+
+  // score tiles
+  const box = document.getElementById("liveTiles");
+  box.replaceChildren();
+  const tile = (label, value, total, sub, cls = "") => {
+    const v = el("div", { class: "value" }, String(value));
+    if (total !== null) v.append(el("small", { text: ` / ${total}` }));
+    box.append(el("div", { class: "tile " + cls }, el("div", { class: "label", text: label }), v, el("div", { class: "sub", text: sub })));
+  };
+  const open = st.incidents.filter(i => i.status === "open");
+  tile("People saved", rep.people_saved_total, rep.people_at_risk_total, finished ? "final score" : "so far, care residents included", "headline");
+  tile("Incident people saved", rep.people_saved, null, `${rep.incidents_resolved} of ${rep.incidents_total} incidents resolved`);
+  tile("Lost to missed deadlines", rep.people_lost_incidents, null, `${rep.incidents_missed} incident(s) missed`);
+  if (st.chronic) tile("Care residents alive", st.chronic.people_remaining, st.chronic.initial_people, `${rep.people_lost_chronic} lost so far`);
+  tile("Open incidents", open.length, null, open.length ? `${open.reduce((a, i) => a + i.people_at_risk, 0)} people waiting` : "none right now");
+
+  // vehicles
+  const vbox = document.getElementById("liveVehicles");
+  vbox.replaceChildren();
+  st.vehicles.forEach(v => {
+    const pillCls = v.status === "available" ? "ok" : v.status === "busy" ? "busy" : "bad";
+    const card = el("div", { class: "vcard" },
+      el("div", { class: "vname" }, el("b", { text: v.name }), el("span", { class: "pill " + pillCls, text: v.status.replace(/_/g, " ") })),
+      el("div", { class: "line muted mono", text: `${v.id} · speed ${v.speed}x` }));
+    const m = v.mission;
+    if (m) {
+      const what = m.kind === "incident" ? `to ${m.incident_id} at ${loc(m.target)}` : `moving to ${loc(m.target)}`;
+      card.append(el("div", { class: "line", text: `From ${loc(m.origin)}, ${what}` }));
+      card.append(el("div", { class: "line mono", text: `arrives ${hh(m.arrival)} (in ${m.arrival - clock}h)` }));
+      const span = Math.max(1, m.arrival - m.depart);
+      card.append(el("div", { class: "mini" }, el("div", { style: `width:${Math.min(100, 100 * (clock - m.depart) / span)}%` })));
+    } else {
+      card.append(el("div", { class: "line", text: `At ${loc(v.location_id)}` }));
+      if (v.oos_reason) card.append(el("div", { class: "line muted", text: v.oos_reason }));
+    }
+    vbox.append(card);
+  });
+
+  // care home
+  const cbox = document.getElementById("liveCare");
+  cbox.replaceChildren();
+  const c = st.chronic;
+  if (!c) {
+    cbox.append(el("div", { class: "muted", text: "This scenario has no care home." }));
+  } else {
+    const windowStart = c.next_tick - c.interval_hours;
+    const covered = c.last_visit >= windowStart;
+    const enRoute = st.vehicles.filter(v => v.mission && v.mission.target === c.location_id && v.mission.arrival <= c.next_tick)
+      .map(v => `${v.id} arrives ${hh(v.mission.arrival)}`);
+    let status, cls;
+    if (c.people_remaining <= 0) { status = "no residents left"; cls = "bad"; }
+    else if (covered) { status = `covered for the ${hh(c.next_tick)} tick`; cls = "ok"; }
+    else if (enRoute.length) { status = `visit on the way: ${enRoute.join(", ")}`; cls = "warn"; }
+    else { status = `needs a vehicle to arrive by ${hh(c.next_tick)}`; cls = (c.next_tick - clock) <= 12 ? "bad" : "warn"; }
+    const big = el("div", { class: "care-big" }, String(c.people_remaining), el("small", { text: ` / ${c.initial_people} residents` }));
+    const dl = el("dl", { class: "care-facts" });
+    const fact = (k, v) => { dl.append(el("dt", { text: k }), el("dd", { text: v })); };
+    fact("Where", loc(c.location_id));
+    fact("Last visit", c.last_visit >= 0 ? `${hh(c.last_visit)} (${clock - c.last_visit}h ago)` : "none yet");
+    fact("Next tick", c.people_remaining > 0 ? `${hh(c.next_tick)} (in ${c.next_tick - clock}h)` : "none");
+    fact("Rule", `a vehicle must arrive between ${hh(Math.max(0, windowStart))} and ${hh(c.next_tick)}, or ${c.loss_per_tick} residents are lost`);
+    cbox.append(el("div", { style: "display:grid;gap:10px" }, big, el("div", {}, el("span", { class: "pill " + cls, text: status })), dl));
+  }
+
+  // open incidents, most urgent first
+  const tb = document.querySelector("#liveInc tbody");
+  tb.replaceChildren();
+  [...open].sort((a, b) => a.deadline - b.deadline).forEach(i => {
+    const left = i.deadline - clock;
+    const resp = i.assigned_vehicle_id ? st.vehicles.find(v => v.id === i.assigned_vehicle_id) : null;
+    const respText = resp ? `${resp.id}${resp.mission ? `, arrives ${hh(resp.mission.arrival)}` : ""}` : "unassigned";
+    tb.append(el("tr", {},
+      el("td", {}, el("span", { class: "mono", text: i.id }), el("br"), el("span", { class: "muted", text: i.title })),
+      el("td", { text: loc(i.location_id) }),
+      el("td", { class: "num", text: String(i.people_at_risk) }),
+      el("td", { class: "num mono", text: hh(i.deadline) }),
+      el("td", { class: "num " + (left <= 3 ? "left-bad" : left <= 8 ? "left-warn" : ""), text: `${left}h` }),
+      el("td", { class: resp ? "mono" : "muted", text: respText })));
+  });
+  if (!open.length) tb.append(el("tr", {}, el("td", { colspan: 6, class: "muted", text: "No open incidents right now." })));
+  document.getElementById("liveIncNote").textContent = `${rep.incidents_resolved} resolved · ${rep.incidents_missed} missed so far`;
+}
+
+function renderLiveFeed() {
+  const host = document.getElementById("liveFeed");
+  const nameEl = document.getElementById("liveLogName");
+  if (!liveFile) { nameEl.textContent = "no decision log in runs/ yet"; host.replaceChildren(); return; }
+  const finishedLog = liveRecs.some(r => r.type === "summary");
+  const engineRunning = liveState && liveState.clock < liveState.horizon_hours;
+  nameEl.textContent = liveFile + (finishedLog && engineRunning ? " (a finished run; start the planner for new decisions)" : "");
+  const shown = liveRecs.filter(r => r.type === "decision" || (r.type === "event" && PROBLEM.has(r.kind))).slice(-FEED_SIZE).reverse();
+  const frag = document.createDocumentFragment();
+  shown.forEach(r => {
+    const isDecision = r.type === "decision";
+    const kind = isDecision ? r.action : r.kind;
+    const cat = PROBLEM.has(kind) ? "problem" : isDecision ? "decision" : "engine";
+    const what = el("div", { class: "what" });
+    const who = isDecision ? [r.vehicle, r.target].filter(Boolean).join(" -> ") : "";
+    if (who) what.append(el("span", { class: "who", text: who }));
+    what.append(document.createTextNode(isDecision ? (r.reason || "") : (r.text || "")));
+    frag.append(el("div", { class: `row ${cat}` }, el("div", { class: "when", text: `${hh(r.hour)} ${day(r.hour)}` }), el("div", { class: "kind", text: kind }), what));
+  });
+  host.replaceChildren(frag);
+  if (!shown.length) host.append(el("div", { class: "row" }, el("div"), el("div"), el("div", { class: "muted", text: "No decisions yet." })));
+}
+
+// ---------------------------------------------------------------- views
+
+function showView(view) {
+  document.getElementById("liveView").hidden = view !== "live";
+  document.getElementById("replayView").hidden = view !== "replay";
+  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.view === view)));
+  if (view === "live") startLive(); else stopLive();
+  if (view === "replay" && run) { renderTimeline(); renderChart(); }
+  try { history.replaceState(null, "", "#" + view); } catch (e) { /* hash is a convenience */ }
+}
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => showView(b.dataset.view)));
+showView(location.hash === "#replay" ? "replay" : "live");
 listRuns();
 </script>
 </body>
