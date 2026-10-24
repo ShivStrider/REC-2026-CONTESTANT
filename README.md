@@ -33,12 +33,12 @@ Use `python3` instead of `python` on macOS and Linux.
 
        python -m dashboard --engine-port 8600
 
-   Start it before the planner, and run the planner with `--pace 0.2`, to
-   watch the run as it happens. The
-   **Live** tab reads the engine once a second and shows the newest
-   planner decisions as they are written. The **Replay a run** tab opens
-   any finished log in `runs/`. You can also open `dashboard/index.html`
-   straight from disk and drop a `.jsonl` file onto it.
+   Start it before the planner, and run the planner with `--pace 0.5`, to
+   watch the run as it happens. The front page is the live map. The
+   **Numbers** button (http://127.0.0.1:8700/numbers) opens the live
+   numbers and the **Replay a run** tab, which opens any finished log in
+   `runs/`. You can also open `dashboard/index.html` straight from disk and
+   drop a `.jsonl` file onto it.
 
 For judging, use `--scenario 90day`. The API and the planner are the same.
 
@@ -138,12 +138,16 @@ Dashboard options: `--port` (default 8700), `--engine-host` and
 
 ### Live map
 
-Open it from the **Live map** button, or at http://127.0.0.1:8700/map.
+The front page, http://127.0.0.1:8700.
 
 - **Roads:** the scenario has no coordinates, so locations are placed so
   that distance on screen follows travel hours. Each road shows its hours.
   Restricted roads are dashed and marked ×1.5; closed roads are red with
   an ✕.
+- **Route search:** every new trip replays the shortest-route search the
+  planner ran. A wave spreads out from the vehicle along open roads in
+  order of travel time, then the route it chose lights up. Closed roads
+  never light up, so a detour around a closure is visible.
 - **Vehicles:** dots that move along their actual route, coloured by job:
   blue to an incident, purple for a care-home trip, grey for
   repositioning. A cancelled trip, or a breakdown, shows as a flash where
@@ -154,7 +158,9 @@ Open it from the **Live map** button, or at http://127.0.0.1:8700/map.
   bursts green; a miss bursts grey.
 - **Care home:** a 24-hour dial that drains as the last visit's cover runs
   out and refills when a vehicle arrives. The black mark is the next tick.
-- **Captions:** the planner's last two decisions and their reasons.
+- **Side panel:** the score so far, where each vehicle is going and when it
+  gets there, and the open incidents with hours left.
+- **Subtitles:** the planner's last two decisions and their reasons.
 
 ### Replay a run
 

@@ -5,119 +5,151 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>REC 2026 Live Map</title>
 <style>
-/* Full-width map with a thin status bar above and subtitles below.
-   Canvas drawing; colours come from the same tokens as the dashboard. System fonts only (offline). */
+/* One dark look on purpose: a glowing road graph on a near-black field, readable on a projector.
+   Map on the left, live numbers in a side panel, the planner's reasoning as subtitles underneath.
+   System fonts only, so it works offline on the demo laptop. */
 :root {
-  --bg: #f4f5f2;
-  --surface: #ffffff;
-  --fg: #1d2327;
-  --muted: #5d6970;
-  --line: #b9c1bc;
-  --grid: #e9ece9;
-  --accent: #b9410f;
-  --incident: #2f6fb0;
-  --care: #8a4fb8;
-  --move: #6f7d85;
-  --ok: #2c7a4b;
-  --bad: #c0352b;
-  --warn: #a06c00;
+  color-scheme: dark;
+  --bg: #070b12;
+  --panel: rgba(13, 20, 31, 0.92);
+  --fg: #e6edf5;
+  --muted: #8494a7;
+  --rule: #1d2a3a;
+  --edge: #2c4a66;
+  --search: #39d0ff;
+  --incident: #4ea8ff;
+  --care: #c58bff;
+  --move: #9fb0c2;
+  --ok: #3ee08f;
+  --bad: #ff5a5a;
+  --warn: #ffc24a;
   --font-body: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "Cascadia Mono", Consolas, ui-monospace, "SF Mono", Menlo, monospace;
-  color-scheme: light;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #121618; --surface: #1a2023; --fg: #e3e7e5; --muted: #98a4aa; --line: #45525a; --grid: #222a2d;
-    --accent: #f08a50; --incident: #6aa6e4; --care: #c08ae6; --move: #9aa6ad;
-    --ok: #63c08b; --bad: #f07368; --warn: #e2b450;
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #121618; --surface: #1a2023; --fg: #e3e7e5; --muted: #98a4aa; --line: #45525a; --grid: #222a2d;
-  --accent: #f08a50; --incident: #6aa6e4; --care: #c08ae6; --move: #9aa6ad;
-  --ok: #63c08b; --bad: #f07368; --warn: #e2b450;
-  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 var(--font-body); display: flex; flex-direction: column; }
-.bar { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; justify-content: space-between; padding: 12px max(16px, 2vw); border-bottom: 1px solid var(--line); background: var(--surface); }
-.bar h1 { margin: 0; font-size: 18px; font-weight: 700; }
-.eyebrow { font: 600 11px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
-.stats { display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: baseline; font-variant-numeric: tabular-nums; }
-.stat b { font-size: 20px; }
-.stat span { color: var(--muted); font-size: 13px; }
-.status { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 var(--font-body);
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-areas: "top top" "map side" "subs side";
+}
+.top { grid-area: top; display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; justify-content: space-between;
+  padding: 12px max(16px, 2vw); border-bottom: 1px solid var(--rule); }
+.eyebrow { font: 600 11px var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--search); }
+h1 { margin: 0; font-size: 18px; font-weight: 650; }
+.clock { font: 700 26px var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.clock small { font-size: 14px; color: var(--muted); font-weight: 400; margin-left: 8px; }
+.progress { width: min(320px, 40vw); height: 4px; background: var(--rule); border-radius: 4px; overflow: hidden; margin-top: 6px; }
+.progress > div { height: 100%; width: 0; background: var(--search); box-shadow: 0 0 8px var(--search); }
+.status { display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--muted); }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
-.dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.done { background: var(--accent); }
-a.back { color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; font-size: 13px; }
-a.back:hover, a.back:focus-visible { border-color: var(--accent); outline: none; }
-.stage { position: relative; flex: 1 1 auto; min-height: 380px; }
+.dot.ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); } .dot.bad { background: var(--bad); } .dot.done { background: var(--search); }
+a.back { color: var(--fg); text-decoration: none; border: 1px solid var(--rule); border-radius: 6px; padding: 5px 10px; font-size: 13px; }
+a.back:hover, a.back:focus-visible { border-color: var(--search); outline: none; }
+
+.stage { grid-area: map; position: relative; min-height: 360px; }
 canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.legend { position: absolute; left: max(16px, 2vw); top: 12px; display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); background: color-mix(in srgb, var(--surface) 85%, transparent); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
-.legend i { display: inline-block; width: 18px; height: 0; border-top: 3px solid var(--c); margin-right: 6px; vertical-align: middle; }
-.legend i.dash { border-top-style: dashed; }
-.legend i.round { width: 10px; height: 10px; border: 0; border-radius: 50%; background: var(--c); margin-right: 10px; }
-.subs { padding: 10px max(16px, 2vw) 14px; border-top: 1px solid var(--line); background: var(--surface); min-height: 76px; display: grid; gap: 4px; }
-.sub { display: grid; grid-template-columns: 96px 120px minmax(0, 1fr); gap: 10px; font-size: 16px; }
-.sub.old { opacity: .5; font-size: 14px; }
+.legend { position: absolute; left: 14px; bottom: 12px; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); max-width: calc(100% - 28px); }
+.legend span::before { content: ""; display: inline-block; width: 16px; height: 0; border-top: 3px solid var(--c); margin-right: 6px; vertical-align: middle; }
+.legend span.dash::before { border-top-style: dashed; }
+
+.side { grid-area: side; border-left: 1px solid var(--rule); background: var(--panel); overflow: auto; padding: 16px; display: grid; gap: 18px; align-content: start; }
+.side h2 { margin: 0 0 8px; font: 600 11px var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.score { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.num { display: grid; gap: 0; }
+.num b { font: 700 28px var(--font-mono); font-variant-numeric: tabular-nums; }
+.num b small { font-size: 14px; color: var(--muted); font-weight: 400; }
+.num span { font-size: 12.5px; color: var(--muted); }
+.num.big { grid-column: 1 / -1; }
+.num.big b { font-size: 40px; color: var(--ok); text-shadow: 0 0 14px rgba(62, 224, 143, .35); }
+.list { display: grid; gap: 6px; }
+.item { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; font-size: 14px; }
+.item i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c); align-self: center; }
+.item .what { min-width: 0; overflow-wrap: anywhere; }
+.item .what small { display: block; color: var(--muted); font-size: 12.5px; }
+.item .val { font: 600 13px var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.val.bad { color: var(--bad); } .val.warn { color: var(--warn); } .val.ok { color: var(--ok); }
+.empty { color: var(--muted); font-size: 13.5px; }
+
+.subs { grid-area: subs; padding: 10px max(16px, 2vw) 14px; border-top: 1px solid var(--rule); min-height: 74px; display: grid; gap: 4px; align-content: start; }
+.sub { display: grid; grid-template-columns: 92px 118px minmax(0, 1fr); gap: 10px; font-size: 16px; }
+.sub.old { opacity: .45; font-size: 14px; }
 .sub .h { font-family: var(--font-mono); color: var(--muted); font-size: 13px; padding-top: 2px; }
-.sub .k { font: 700 12.5px var(--font-mono); color: var(--accent); padding-top: 2px; }
+.sub .k { font: 700 12.5px var(--font-mono); color: var(--search); padding-top: 2px; }
 .sub .k.bad { color: var(--bad); }
 .sub .t { min-width: 0; overflow-wrap: anywhere; }
-.sub .w { font-family: var(--font-mono); font-size: 13.5px; margin-right: 6px; }
-.empty { color: var(--muted); font-size: 14px; }
-@media (max-width: 640px) { .sub { grid-template-columns: 1fr; gap: 0; } .legend { display: none; } }
+.sub .w { font-family: var(--font-mono); font-size: 13.5px; margin-right: 6px; color: var(--muted); }
+
+@media (max-width: 900px) {
+  body { grid-template-columns: 1fr; grid-template-rows: auto 60vh auto auto; grid-template-areas: "top" "map" "subs" "side"; }
+  .side { border-left: 0; border-top: 1px solid var(--rule); }
+  .sub { grid-template-columns: 1fr; gap: 0; }
+}
 </style>
 </head>
 <body>
-<header class="bar">
+<header class="top">
   <div>
-    <div class="eyebrow">REC 2026 · Live map</div>
+    <div class="eyebrow">REC 2026 · Emergency response</div>
     <h1 id="scenario">Waiting for the engine</h1>
   </div>
-  <div class="stats" aria-live="polite">
-    <div class="stat"><b id="sDay">-</b> <span id="sHour"></span></div>
-    <div class="stat"><b id="sSaved">-</b> <span>people saved</span></div>
-    <div class="stat"><b id="sCare">-</b> <span>care residents</span></div>
-    <div class="stat"><b id="sOpen">-</b> <span>open incidents</span></div>
+  <div>
+    <div class="clock"><span id="cDay">Day -</span><small id="cHour"></small></div>
+    <div class="progress" aria-hidden="true"><div id="bar"></div></div>
   </div>
-  <div class="status"><span class="dot" id="dot"></span><span id="status">Connecting...</span><a class="back" href="./">Numbers view</a></div>
+  <div class="status"><span class="dot" id="dot"></span><span id="status">Connecting...</span><a class="back" href="numbers">Numbers</a></div>
 </header>
 
 <div class="stage" id="stage">
-  <canvas id="map" role="img" aria-label="Live map of the road network, vehicles, incidents and the care home"></canvas>
+  <canvas id="map" role="img" aria-label="Road network with vehicles, incidents and the care home"></canvas>
   <div class="legend" aria-hidden="true">
-    <div><i style="--c: var(--line)"></i>open road</div>
-    <div><i class="dash" style="--c: var(--warn)"></i>restricted (×1.5)</div>
-    <div><i style="--c: var(--bad)"></i>closed</div>
-    <div><i class="round" style="--c: var(--incident)"></i>to an incident</div>
-    <div><i class="round" style="--c: var(--care)"></i>care-home trip</div>
-    <div><i class="round" style="--c: var(--move)"></i>repositioning</div>
-    <div><i class="round" style="--c: var(--bad)"></i>incident ring: shrinks to its deadline</div>
+    <span style="--c: var(--search)">route search</span>
+    <span style="--c: var(--incident)">to an incident</span>
+    <span style="--c: var(--care)">care-home trip</span>
+    <span style="--c: var(--move)">repositioning</span>
+    <span class="dash" style="--c: var(--warn)">restricted ×1.5</span>
+    <span style="--c: var(--bad)">closed</span>
   </div>
 </div>
 
-<div class="subs" id="subs"><div class="empty">The planner's latest decisions appear here.</div></div>
+<aside class="side" aria-label="Live numbers">
+  <section>
+    <h2>Score</h2>
+    <div class="score">
+      <div class="num big"><b id="nSaved">-</b><span>people saved, care residents included</span></div>
+      <div class="num"><b id="nLost">-</b><span>lost to missed deadlines</span></div>
+      <div class="num"><b id="nCare">-</b><span>care residents alive</span></div>
+    </div>
+  </section>
+  <section><h2>Vehicles</h2><div class="list" id="vehicles"></div></section>
+  <section><h2>Open incidents</h2><div class="list" id="incidents"><div class="empty">None right now.</div></div></section>
+</aside>
+
+<div class="subs" id="subs"><div class="empty">The planner's latest decisions and its reasons appear here.</div></div>
 
 <script>
 "use strict";
 const DEFAULT_ENGINE = "http://127.0.0.1:8600";
 const RESTRICTED = 1.5;
 const TRAIL_MS = 1400;
+const SEARCH_MS = 1300;                        // how long a route search takes to spread
 const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+const C = {};
+(() => {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ["bg", "fg", "muted", "rule", "edge", "search", "incident", "care", "move", "ok", "bad", "warn"]) C[k] = cs.getPropertyValue("--" + k).trim();
+})();
 
-let engineUrl = null;
+let engineUrl = DEFAULT_ENGINE;
 let state = null, report = null;
-let layoutKey = "", pos = {};                 // location id -> {x, y} in layout units
-let view = { scale: 1, ox: 0, oy: 0 };       // layout units -> CSS pixels
-let colors = {};
+let layoutKey = "", pos = {};
+let view = { scale: 1, ox: 0, oy: 0 };
 let shownClock = 0, animFrom = 0, animTo = 0, animStart = 0, animDur = 1;
-const tracks = {};                            // vehicle id -> {queue: [mission...], trail: [], flash}
-const effects = [];                           // bursts and flashes
-let prevInc = {}, prevCare = null;
+const tracks = {};                             // vehicle id -> {queue, trail, status, loc}
+const searches = [];                           // route-search waves still on screen
+const effects = [];                            // bursts and flashes
+let prevInc = {}, prevCare = null, firstState = true;
 let decisions = [], decFile = "", decNext = 0;
 
 // ------------------------------------------------------------------ helpers
@@ -125,21 +157,11 @@ let decisions = [], decFile = "", decNext = 0;
 const hh = h => "H" + String(h).padStart(4, "0");
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const ease = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-function readColors() {
-  const cs = getComputedStyle(document.documentElement);
-  for (const k of ["bg", "surface", "fg", "muted", "line", "grid", "accent", "incident", "care", "move", "ok", "bad", "warn"]) {
-    colors[k] = cs.getPropertyValue("--" + k).trim();
-  }
-}
-function alpha(color, a) {                    // hex or rgb() -> rgba()
-  if (color.startsWith("#")) {
-    let h = color.slice(1);
-    if (h.length === 3) h = h.split("").map(c => c + c).join("");
-    const n = parseInt(h, 16);
-    return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
-  }
-  const m = color.match(/[\d.]+/g) || [0, 0, 0];
-  return `rgba(${m[0]},${m[1]},${m[2]},${a})`;
+function rgba(hex, a) {
+  let h = hex.replace("#", "");
+  if (h.length === 3) h = h.split("").map(c => c + c).join("");
+  const n = parseInt(h, 16);
+  return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
 }
 async function getJson(url, ms = 2500) {
   const ctl = new AbortController();
@@ -150,23 +172,22 @@ async function getJson(url, ms = 2500) {
     return await res.json();
   } finally { clearTimeout(t); }
 }
+function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
 
 // ------------------------------------------------------------------ graph
 
-function roadHours(r) { return r.hours * (r.status === "restricted" ? RESTRICTED : 1); }
-
-function adjacency(roads, useStatus) {
+const roadHours = r => r.hours * (r.status === "restricted" ? RESTRICTED : 1);
+function adjacency(roads, live) {
   const adj = {};
   roads.forEach(r => {
-    if (useStatus && r.status === "closed") return;
-    const w = useStatus ? roadHours(r) : r.hours;
+    if (live && r.status === "closed") return;
+    const w = live ? roadHours(r) : r.hours;
     (adj[r.from_location_id] ||= []).push([r.to_location_id, w]);
     (adj[r.to_location_id] ||= []).push([r.from_location_id, w]);
   });
   return adj;
 }
-
-function dijkstra(adj, start) {                // -> {dist, prev}
+function dijkstra(adj, start) {
   const dist = { [start]: 0 }, prev = {}, done = new Set();
   for (;;) {
     let u = null;
@@ -180,43 +201,36 @@ function dijkstra(adj, start) {                // -> {dist, prev}
   }
   return { dist, prev };
 }
-
-function routePath(roads, from, to) {         // node list along the current shortest route
-  const { prev } = dijkstra(adjacency(roads, true), from);
-  if (from !== to && prev[to] === undefined) return [from, to];
-  const path = [to];
-  while (path[0] !== from) path.unshift(prev[path[0]]);
-  return path;
+function route(roads, from, to) {              // the same search the planner runs: open + restricted roads only
+  const { dist, prev } = dijkstra(adjacency(roads, true), from);
+  let path = [from, to];
+  if (from === to) path = [from];
+  else if (prev[to] !== undefined) { path = [to]; while (path[0] !== from) path.unshift(prev[path[0]]); }
+  return { path, dist };
 }
 
-// Layout: no coordinates in the scenario, so place locations so that straight-line
-// distance tracks travel hours (stress majorization over shortest-path hours).
+// Layout: the scenario has no coordinates, so place locations so that distance on
+// screen follows travel hours (stress majorization over shortest-path hours).
 function computeLayout(locs, roads) {
-  const ids = locs.map(l => l.id);
+  const ids = locs.map(l => l.id), n = ids.length;
   const adj = adjacency(roads, false);
   const D = ids.map(a => { const { dist } = dijkstra(adj, a); return ids.map(b => dist[b]); });
   let maxD = 0;
   D.forEach(row => row.forEach(d => { if (d !== undefined && d > maxD) maxD = d; }));
   D.forEach(row => row.forEach((d, j) => { if (d === undefined) row[j] = maxD * 1.3 || 1; }));
-  const n = ids.length;
   let P = ids.map((_, i) => ({ x: Math.cos(2 * Math.PI * i / n) * maxD / 2, y: Math.sin(2 * Math.PI * i / n) * maxD / 2 }));
   for (let it = 0; it < 400; it++) {
-    const next = P.map((p, i) => {
+    P = P.map((p, i) => {
       let sx = 0, sy = 0, sw = 0;
       for (let j = 0; j < n; j++) {
         if (i === j || !D[i][j]) continue;
         const w = 1 / (D[i][j] * D[i][j]);
-        const dx = p.x - P[j].x, dy = p.y - P[j].y;
-        const cur = Math.hypot(dx, dy) || 1e-6;
-        sx += w * (P[j].x + D[i][j] * dx / cur);
-        sy += w * (P[j].y + D[i][j] * dy / cur);
-        sw += w;
+        const dx = p.x - P[j].x, dy = p.y - P[j].y, cur = Math.hypot(dx, dy) || 1e-6;
+        sx += w * (P[j].x + D[i][j] * dx / cur); sy += w * (P[j].y + D[i][j] * dy / cur); sw += w;
       }
       return sw ? { x: sx / sw, y: sy / sw } : p;
     });
-    P = next;
   }
-  // landscape orientation: rotate so the widest spread runs left-right
   let cx = 0, cy = 0; P.forEach(p => { cx += p.x / n; cy += p.y / n; });
   let sxx = 0, syy = 0, sxy = 0;
   P.forEach(p => { const dx = p.x - cx, dy = p.y - cy; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; });
@@ -228,13 +242,12 @@ function computeLayout(locs, roads) {
   });
   return out;
 }
-
 function fitView(w, h) {
   const pts = Object.values(pos);
   if (!pts.length) return;
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   pts.forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); });
-  const padX = Math.min(170, w * 0.16), padTop = 70, padBottom = 60;
+  const padX = Math.min(130, w * 0.14), padTop = 80, padBottom = 90;
   const sw = Math.max(1, maxX - minX), sh = Math.max(1, maxY - minY);
   const scale = Math.min((w - 2 * padX) / sw, (h - padTop - padBottom) / sh);
   view = { scale, ox: padX + ((w - 2 * padX) - sw * scale) / 2 - minX * scale, oy: padTop + ((h - padTop - padBottom) - sh * scale) / 2 - minY * scale };
@@ -260,11 +273,10 @@ async function poll() {
       d.records.forEach(r => { if (r.type === "decision" || (r.type === "event" && (r.kind === "incident_missed" || r.kind === "chronic_loss"))) decisions.push(r); });
       if (decisions.length > 300) decisions = decisions.slice(-300);
       renderSubs();
-    } catch (e) { /* captions are optional */ }
+    } catch (e) { /* subtitles are optional */ }
   }
   setTimeout(poll, 700);
 }
-
 function setStatus(kind, text) {
   document.getElementById("dot").className = "dot " + kind;
   document.getElementById("status").textContent = text;
@@ -273,17 +285,11 @@ function setStatus(kind, text) {
 function ingest(st, rep) {
   const now = performance.now();
   const key = st.scenario_id + "|" + st.locations.map(l => l.id).join(",") + "|" + st.roads.map(r => `${r.id}:${r.hours}`).join(",");
-  if (key !== layoutKey) {                      // new scenario: fresh layout and history
-    layoutKey = key;
-    pos = computeLayout(st.locations, st.roads);
+  const reset = key !== layoutKey || (state && st.clock < state.clock);
+  if (key !== layoutKey) { layoutKey = key; pos = computeLayout(st.locations, st.roads); resize(); }
+  if (reset) {
     for (const k in tracks) delete tracks[k];
-    prevInc = {}; prevCare = null; effects.length = 0;
-    shownClock = animFrom = animTo = st.clock;
-    resize();
-  }
-  if (state && st.clock < state.clock) {        // engine was reset
-    for (const k in tracks) delete tracks[k];
-    prevInc = {}; prevCare = null;
+    prevInc = {}; prevCare = null; effects.length = 0; searches.length = 0; firstState = true;
     shownClock = animFrom = animTo = st.clock;
   }
   if (st.clock !== animTo) {
@@ -291,53 +297,47 @@ function ingest(st, rep) {
     animDur = reduceMotion ? 1 : clamp((animTo - animFrom) * 140, 350, 650);
   }
 
-  // vehicles: queue missions so a trip that ended between polls still glides to its end
   st.vehicles.forEach(v => {
-    const t = tracks[v.id] ||= { queue: [], trail: [], last: null };
+    const t = tracks[v.id] ||= { queue: [], trail: [] };
     const m = v.mission;
-    if (m) {
-      const k = `${m.depart}|${m.target}|${m.arrival}`;
-      if (!t.queue.some(q => q.key === k)) {
-        t.queue.push({ ...m, key: k, path: routePath(st.roads, m.origin, m.target), job: jobOf(v.id, m, st) });
-      }
+    const mk = m ? `${m.depart}|${m.target}|${m.arrival}` : null;
+    if (m && !t.queue.some(q => q.key === mk)) {
+      const r = route(st.roads, m.origin, m.target);
+      const job = jobOf(v.id, m, st);
+      t.queue.push({ ...m, key: mk, path: r.path, job });
+      if (!firstState) searches.push({ origin: m.origin, path: r.path, dist: r.dist, roads: st.roads.map(x => ({ ...x })), target: m.target, color: C[job], t0: now });
     }
-    // a queued mission that is gone before its arrival hour was cancelled or force-cancelled
+    // gone before its arrival hour: cancelled, or force-cancelled by a breakdown
     t.queue = t.queue.filter(q => {
-      const live = m && q.key === `${m.depart}|${m.target}|${m.arrival}`;
-      if (live || q.arrival <= st.clock) return true;
+      if (q.key === mk || q.arrival <= st.clock) return true;
       const broke = v.status === "out_of_service";
-      effects.push({ kind: "flash", at: q.origin, color: broke ? colors.bad : colors.muted, t0: now, dur: 1400,
-                     label: broke ? `${v.id} broke down` : `${v.id} cancelled` });
+      effects.push({ kind: "flash", at: q.origin, color: broke ? C.bad : C.muted, t0: now, dur: 1500, label: broke ? `${v.id} broke down` : `${v.id} trip cancelled` });
       t.trail = [];
       return false;
     });
-    t.status = v.status; t.loc = v.location_id; t.speed = v.speed;
+    t.status = v.status; t.loc = v.location_id;
   });
 
-  // incidents: bursts on outcome
   st.incidents.forEach(i => {
     const was = prevInc[i.id];
-    if (was === "open" && i.status === "resolved") effects.push({ kind: "burst", at: i.location_id, color: colors.ok, t0: now, dur: 1600, label: `+${i.people_at_risk} saved` });
-    if (was === "open" && i.status === "missed") effects.push({ kind: "burst", at: i.location_id, color: colors.muted, t0: now, dur: 2200, label: `${i.people_at_risk} lost` });
+    if (was === "open" && i.status === "resolved") effects.push({ kind: "burst", at: i.location_id, color: C.ok, t0: now, dur: 1600, label: `${i.people_at_risk} saved` });
+    if (was === "open" && i.status === "missed") effects.push({ kind: "burst", at: i.location_id, color: C.muted, t0: now, dur: 2200, label: `${i.people_at_risk} lost` });
     prevInc[i.id] = i.status;
   });
-
-  // care home: refill on a new visit, red flash on a loss
   const c = st.chronic;
   if (c && prevCare) {
-    if (c.last_visit !== prevCare.last_visit) effects.push({ kind: "burst", at: c.location_id, color: colors.care, t0: now, dur: 1200, label: "visit" });
-    if (c.people_remaining < prevCare.people_remaining) effects.push({ kind: "flash", at: c.location_id, color: colors.bad, t0: now, dur: 1800, label: `-${prevCare.people_remaining - c.people_remaining} residents` });
+    if (c.last_visit !== prevCare.last_visit) effects.push({ kind: "burst", at: c.location_id, color: C.care, t0: now, dur: 1300, label: "care visit" });
+    if (c.people_remaining < prevCare.people_remaining) effects.push({ kind: "flash", at: c.location_id, color: C.bad, t0: now, dur: 1800, label: `${prevCare.people_remaining - c.people_remaining} residents lost` });
   }
   prevCare = c ? { ...c } : null;
-
+  firstState = false;
   state = st; report = rep;
-  renderBar();
+  renderSide();
 }
 
 function jobOf(vid, m, st) {
   if (m.kind === "incident") return "incident";
-  const care = st.chronic && st.chronic.location_id;
-  if (care && m.target === care) return "care";
+  if (st.chronic && m.target === st.chronic.location_id) return "care";
   for (let i = decisions.length - 1; i >= 0; i--) {
     const d = decisions[i];
     if (d.type === "decision" && d.vehicle === vid) return d.action.startsWith("CARE") ? "care" : "move";
@@ -345,15 +345,50 @@ function jobOf(vid, m, st) {
   return "move";
 }
 
-function renderBar() {
+// ------------------------------------------------------------------ side panel and subtitles
+
+function renderSide() {
   const st = state, rep = report;
-  document.getElementById("scenario").textContent = `${st.title || st.scenario_id}`;
+  const lname = Object.fromEntries(st.locations.map(l => [l.id, l.name]));
   const days = st.horizon_hours / 24;
-  document.getElementById("sDay").textContent = `Day ${Math.min(st.day, days)}/${days}`;
-  document.getElementById("sHour").textContent = hh(st.clock);
-  document.getElementById("sSaved").textContent = `${rep.people_saved_total}/${rep.people_at_risk_total}`;
-  document.getElementById("sCare").textContent = st.chronic ? `${st.chronic.people_remaining}/${st.chronic.initial_people}` : "-";
-  document.getElementById("sOpen").textContent = String(st.incidents.filter(i => i.status === "open").length);
+  document.getElementById("scenario").textContent = st.title || st.scenario_id;
+  document.getElementById("cDay").textContent = `Day ${Math.min(st.day, days)} of ${days}`;
+  document.getElementById("cHour").textContent = `${hh(st.clock)} / ${hh(st.horizon_hours)}`;
+  document.getElementById("bar").style.width = `${Math.min(100, 100 * st.clock / st.horizon_hours)}%`;
+  const saved = document.getElementById("nSaved");
+  saved.replaceChildren(document.createTextNode(String(rep.people_saved_total)), el("small", "", ` / ${rep.people_at_risk_total}`));
+  document.getElementById("nLost").textContent = String(rep.people_lost_incidents);
+  const care = document.getElementById("nCare");
+  if (st.chronic) care.replaceChildren(document.createTextNode(String(st.chronic.people_remaining)), el("small", "", ` / ${st.chronic.initial_people}`));
+  else care.textContent = "-";
+
+  const vbox = document.getElementById("vehicles");
+  vbox.replaceChildren(...st.vehicles.map(v => {
+    const m = v.mission;
+    const job = m ? (tracks[v.id]?.queue.find(q => q.key === `${m.depart}|${m.target}|${m.arrival}`)?.job || "move") : null;
+    const color = v.status === "out_of_service" ? C.bad : job ? C[job] : C.muted;
+    const row = el("div", "item"); row.style.setProperty("--c", color);
+    const what = el("div", "what", v.name);
+    let detail, val, cls = "";
+    if (v.status === "out_of_service") { detail = v.oos_reason || "out of service"; val = "down"; cls = "bad"; }
+    else if (m) { detail = m.kind === "incident" ? `to ${m.incident_id} at ${lname[m.target] || m.target}` : `to ${lname[m.target] || m.target}`; val = `${m.arrival - st.clock}h`; }
+    else { detail = `free at ${lname[v.location_id] || v.location_id}`; val = "ready"; cls = "ok"; }
+    what.append(el("small", "", detail));
+    row.append(el("i"), what, el("div", "val " + cls, val));
+    return row;
+  }));
+
+  const ibox = document.getElementById("incidents");
+  const open = st.incidents.filter(i => i.status === "open").sort((a, b) => a.deadline - b.deadline);
+  if (!open.length) { ibox.replaceChildren(el("div", "empty", "None right now.")); return; }
+  ibox.replaceChildren(...open.map(i => {
+    const left = i.deadline - st.clock;
+    const row = el("div", "item"); row.style.setProperty("--c", i.assigned_vehicle_id ? C.incident : C.bad);
+    const what = el("div", "what", `${i.id} · ${i.people_at_risk} people`);
+    what.append(el("small", "", `${lname[i.location_id] || i.location_id}, ${i.assigned_vehicle_id ? i.assigned_vehicle_id + " on the way" : "no vehicle yet"}`));
+    row.append(el("i"), what, el("div", "val " + (left <= 3 ? "bad" : left <= 8 ? "warn" : ""), `${left}h left`));
+    return row;
+  }));
 }
 
 function renderSubs() {
@@ -361,17 +396,16 @@ function renderSubs() {
   const last = decisions.slice(-2).reverse();
   if (!last.length) return;
   box.replaceChildren(...last.map((d, i) => {
-    const row = document.createElement("div");
-    row.className = "sub" + (i ? " old" : "");
+    const row = el("div", "sub" + (i ? " old" : ""));
     const isDec = d.type === "decision";
-    const kind = isDec ? d.action : d.kind;
-    const h = document.createElement("div"); h.className = "h"; h.textContent = `${hh(d.hour)} d${String(Math.floor(d.hour / 24) + 1).padStart(2, "0")}`;
-    const k = document.createElement("div"); k.className = "k" + (/REJECTED|ERROR|WARNING|missed|loss/.test(kind) ? " bad" : ""); k.textContent = kind;
-    const t = document.createElement("div"); t.className = "t";
-    const who = isDec ? [d.vehicle, d.target].filter(Boolean).join(" -> ") : "";
-    if (who) { const w = document.createElement("span"); w.className = "w"; w.textContent = who; t.append(w); }
+    const kind = isDec ? d.action : d.kind.replace("_", " ");
+    row.append(el("div", "h", `${hh(d.hour)} d${String(Math.floor(d.hour / 24) + 1).padStart(2, "0")}`),
+               el("div", "k" + (/REJECTED|ERROR|WARNING|missed|loss/.test(kind) ? " bad" : ""), kind));
+    const t = el("div", "t");
+    const who = isDec ? [d.vehicle, d.target].filter(Boolean).join(" → ") : "";
+    if (who) t.append(el("span", "w", who));
     t.append(document.createTextNode(isDec ? (d.reason || "") : (d.text || "")));
-    row.append(h, k, t);
+    row.append(t);
     return row;
   }));
 }
@@ -380,7 +414,7 @@ function renderSubs() {
 
 const canvas = document.getElementById("map");
 const ctx = canvas.getContext("2d");
-let W = 0, H = 0;
+let W = 0, H = 0, bgDots = null;
 function resize() {
   const r = document.getElementById("stage").getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
@@ -388,51 +422,106 @@ function resize() {
   canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   fitView(W, H);
+  bgDots = null;
 }
-
-function pointAlong(path, roads, f) {          // f in [0,1] of travel hours along the route
-  const segs = [];
-  let total = 0;
-  for (let i = 0; i + 1 < path.length; i++) {
-    const r = roads.find(r => (r.from_location_id === path[i] && r.to_location_id === path[i + 1]) || (r.to_location_id === path[i] && r.from_location_id === path[i + 1]));
-    const w = r ? roadHours(r) : 1;
-    segs.push(w); total += w;
+function background() {
+  if (!bgDots) {                               // faint dot grid, drawn once per size
+    bgDots = document.createElement("canvas");
+    const dpr = window.devicePixelRatio || 1;
+    bgDots.width = canvas.width; bgDots.height = canvas.height;
+    const b = bgDots.getContext("2d");
+    b.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const g = b.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.7);
+    g.addColorStop(0, "#0d1624"); g.addColorStop(1, C.bg);
+    b.fillStyle = g; b.fillRect(0, 0, W, H);
+    b.fillStyle = "rgba(120, 150, 190, 0.10)";
+    for (let x = 12; x < W; x += 24) for (let y = 12; y < H; y += 24) b.fillRect(x, y, 1.5, 1.5);
   }
-  if (!segs.length) return px(path[0]);
-  let target = clamp(f, 0, 1) * total;
+  ctx.drawImage(bgDots, 0, 0, W, H);
+}
+function line(a, b, color, width, glow, dash) {
+  ctx.save();
+  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = "round";
+  if (glow) { ctx.shadowColor = color; ctx.shadowBlur = glow; }
+  if (dash) ctx.setLineDash(dash);
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  ctx.restore();
+}
+function pathPoints(path) { return path.map(px); }
+function segHours(roads, a, b) {
+  const r = roads.find(r => (r.from_location_id === a && r.to_location_id === b) || (r.to_location_id === a && r.from_location_id === b));
+  return r ? roadHours(r) : 1;
+}
+function pointAlong(path, roads, f) {
+  if (path.length < 2) return px(path[0]);
+  const segs = []; let total = 0;
+  for (let i = 0; i + 1 < path.length; i++) { const w = segHours(roads, path[i], path[i + 1]); segs.push(w); total += w; }
+  let rest = clamp(f, 0, 1) * total;
   for (let i = 0; i < segs.length; i++) {
-    if (target <= segs[i] || i === segs.length - 1) {
-      const a = px(path[i]), b = px(path[i + 1]);
-      const t = segs[i] ? clamp(target / segs[i], 0, 1) : 1;
-      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+    if (rest <= segs[i] || i === segs.length - 1) {
+      const a = px(path[i]), b = px(path[i + 1]), t = segs[i] ? clamp(rest / segs[i], 0, 1) : 1;
+      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, seg: i, t };
     }
-    target -= segs[i];
+    rest -= segs[i];
   }
   return px(path[path.length - 1]);
 }
 
+function drawSearches(now) {
+  for (let s = searches.length - 1; s >= 0; s--) {
+    const sr = searches[s];
+    const k = (now - sr.t0) / SEARCH_MS;
+    if (k > 1.6) { searches.splice(s, 1); continue; }
+    const reach = (sr.dist[sr.target] ?? 0) * 1.25 + 0.01;
+    const front = reach * clamp(k, 0, 1);
+    const fade = k <= 1 ? 1 : 1 - (k - 1) / 0.6;
+    // the wave: every road the search has reached so far
+    sr.roads.forEach(r => {
+      if (r.status === "closed") return;
+      const da = sr.dist[r.from_location_id], db = sr.dist[r.to_location_id];
+      if (da === undefined && db === undefined) return;
+      const fromA = db === undefined || (da !== undefined && da <= db);
+      const lo = fromA ? da : db, w = roadHours(r);
+      if (front <= lo) return;
+      const f = clamp((front - lo) / w, 0, 1);
+      const a = px(fromA ? r.from_location_id : r.to_location_id), b = px(fromA ? r.to_location_id : r.from_location_id);
+      line(a, { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }, rgba(C.search, 0.55 * fade), 3, 12 * fade);
+    });
+    // nodes the search has settled
+    for (const [id, d] of Object.entries(sr.dist)) {
+      if (d > front) continue;
+      const p = px(id);
+      ctx.save(); ctx.fillStyle = rgba(C.search, 0.35 * fade); ctx.shadowColor = C.search; ctx.shadowBlur = 16 * fade;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 15, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
+    // the chosen route lights up once the search reaches the target
+    if (k > 0.7) {
+      const pts = pathPoints(sr.path), g = clamp((k - 0.7) / 0.3, 0, 1) * fade;
+      for (let i = 0; i + 1 < pts.length; i++) line(pts[i], pts[i + 1], rgba(sr.color, g), 6, 22 * g);
+    }
+  }
+}
+
 function vehicleSpots(clock) {
-  const out = [];
-  const parked = {};
+  const out = [], parked = {};
   for (const [id, t] of Object.entries(tracks)) {
-    t.queue = t.queue.filter(q => q.arrival > clock);      // finished trips drop out once shown
+    t.queue = t.queue.filter(q => q.arrival > clock);
     const q = t.queue.find(q => clock >= q.depart - 1e-9 && clock < q.arrival);
     if (q) {
-      if (q.kind === "move" && q.job === "move") q.job = jobOf(id, q, state);   // its decision may arrive late
+      if (q.kind === "move" && q.job === "move") q.job = jobOf(id, q, state);
       const f = q.arrival > q.depart ? (clock - q.depart) / (q.arrival - q.depart) : 1;
-      out.push({ id, ...pointAlong(q.path, state.roads, f), job: q.job, moving: true, status: t.status, t });
+      out.push({ id, ...pointAlong(q.path, state.roads, f), q, t });
     } else {
       const waiting = t.queue[0];
       const at = waiting && clock < waiting.depart ? waiting.origin : t.loc;
-      (parked[at] ||= []).push({ id, t, at });
+      (parked[at] ||= []).push({ id, t });
     }
   }
   for (const [at, list] of Object.entries(parked)) {
     const c = px(at);
     list.forEach((p, i) => {
-      const a = -Math.PI / 2 + (i - (list.length - 1) / 2) * 0.55;
-      const r = 26;
-      out.push({ id: p.id, x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r, job: null, moving: false, status: p.t.status, t: p.t });
+      const a = -Math.PI / 2 + (i - (list.length - 1) / 2) * 0.6;
+      out.push({ id: p.id, x: c.x + Math.cos(a) * 27, y: c.y + Math.sin(a) * 27, q: null, t: p.t });
     });
   }
   return out;
@@ -440,159 +529,155 @@ function vehicleSpots(clock) {
 
 function frame(now) {
   requestAnimationFrame(frame);
-  ctx.clearRect(0, 0, W, H);
+  background();
+  const font = getComputedStyle(document.body).fontFamily, mono = "Consolas, ui-monospace, monospace";
   if (!state) {
-    ctx.fillStyle = colors.muted; ctx.font = `15px ${getComputedStyle(document.body).fontFamily}`;
-    ctx.textAlign = "center";
-    ctx.fillText("Start the engine (python -m engine.server --port 8600) to see the map.", W / 2, H / 2);
+    ctx.fillStyle = C.muted; ctx.font = `15px ${font}`; ctx.textAlign = "center";
+    ctx.fillText("Start the engine to see the map: python -m engine.server --scenario 7day --port 8600", W / 2, H / 2);
     return;
   }
   const p = animDur ? clamp((now - animStart) / animDur, 0, 1) : 1;
   shownClock = animFrom + (animTo - animFrom) * ease(p);
-  const font = getComputedStyle(document.body).fontFamily;
-  const mono = "Consolas, ui-monospace, monospace";
   const pulse = reduceMotion ? 0.5 : 0.5 + 0.5 * Math.sin(now / 260);
 
   // roads
   state.roads.forEach(r => {
     const a = px(r.from_location_id), b = px(r.to_location_id);
-    ctx.save();
-    ctx.lineWidth = r.status === "open" ? 4 : 4.5;
-    ctx.strokeStyle = r.status === "closed" ? colors.bad : r.status === "restricted" ? colors.warn : colors.line;
-    if (r.status === "restricted") ctx.setLineDash([10, 8]);
-    if (r.status === "closed") ctx.globalAlpha = 0.75;
-    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-    ctx.restore();
+    if (r.status === "closed") line(a, b, rgba(C.bad, 0.55), 2.5, 8, [3, 7]);
+    else if (r.status === "restricted") line(a, b, C.warn, 2.5, 10, [10, 8]);
+    else line(a, b, C.edge, 2.5, 6);
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
     if (r.status === "closed") {
-      ctx.save(); ctx.strokeStyle = colors.bad; ctx.lineWidth = 3.5;
-      ctx.beginPath(); ctx.moveTo(mx - 8, my - 8); ctx.lineTo(mx + 8, my + 8); ctx.moveTo(mx + 8, my - 8); ctx.lineTo(mx - 8, my + 8); ctx.stroke();
-      ctx.restore();
+      ctx.save(); ctx.strokeStyle = C.bad; ctx.lineWidth = 3; ctx.shadowColor = C.bad; ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.moveTo(mx - 7, my - 7); ctx.lineTo(mx + 7, my + 7); ctx.moveTo(mx + 7, my - 7); ctx.lineTo(mx - 7, my + 7); ctx.stroke(); ctx.restore();
     } else {
       const label = r.status === "restricted" ? `${r.hours}h ×1.5` : `${r.hours}h`;
       ctx.font = `12px ${mono}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      const w = ctx.measureText(label).width + 8;
-      ctx.fillStyle = colors.bg; ctx.fillRect(mx - w / 2, my - 9, w, 18);
-      ctx.fillStyle = r.status === "restricted" ? colors.warn : colors.muted; ctx.fillText(label, mx, my);
+      const w = ctx.measureText(label).width + 10;
+      ctx.fillStyle = C.bg; ctx.fillRect(mx - w / 2, my - 9, w, 18);
+      ctx.fillStyle = r.status === "restricted" ? C.warn : C.muted; ctx.fillText(label, mx, my);
     }
   });
 
-  // care-home ring: coverage drains between visits (a visit at hour v covers ticks up to v + interval)
+  // routes of trips in progress, dim, from the vehicle to its target
+  const spots = vehicleSpots(shownClock);
+  spots.forEach(v => {
+    if (!v.q || v.q.path.length < 2) return;
+    const pts = pathPoints(v.q.path), col = C[v.q.job] || C.move;
+    line(v, pts[v.seg + 1], rgba(col, 0.45), 3.5, 8);
+    for (let i = v.seg + 1; i + 1 < pts.length; i++) line(pts[i], pts[i + 1], rgba(col, 0.45), 3.5, 8);
+  });
+
+  drawSearches(now);
+
+  // care home: a 24-hour dial of how long the last visit's cover lasts; the white mark is the next tick
   const c = state.chronic;
   if (c) {
     const at = px(c.location_id);
-    const coverEnd = c.last_visit >= 0 ? c.last_visit + c.interval_hours : 0;
-    const frac = clamp((coverEnd - shownClock) / c.interval_hours, 0, 1);
-    const ringColor = c.people_remaining <= 0 ? colors.muted : frac > 0.34 ? colors.care : frac > 0 ? colors.warn : colors.bad;
+    const frac = clamp(((c.last_visit >= 0 ? c.last_visit + c.interval_hours : 0) - shownClock) / c.interval_hours, 0, 1);
+    const col = c.people_remaining <= 0 ? C.muted : frac > 0.34 ? C.care : frac > 0 ? C.warn : C.bad;
     ctx.save();
-    ctx.lineWidth = 7; ctx.strokeStyle = alpha(colors.care, 0.16);
-    ctx.beginPath(); ctx.arc(at.x, at.y, 34, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = ringColor; ctx.lineCap = "round";
-    if (frac > 0) { ctx.beginPath(); ctx.arc(at.x, at.y, 34, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2); ctx.stroke(); }
-    // tick mark: where the next tick falls on the 24h dial
-    const toTick = clamp((c.next_tick - shownClock) / c.interval_hours, 0, 1);
-    const ta = -Math.PI / 2 + toTick * Math.PI * 2;
-    ctx.lineWidth = 2.5; ctx.strokeStyle = colors.fg;
-    ctx.beginPath(); ctx.moveTo(at.x + Math.cos(ta) * 28, at.y + Math.sin(ta) * 28); ctx.lineTo(at.x + Math.cos(ta) * 41, at.y + Math.sin(ta) * 41); ctx.stroke();
+    ctx.lineWidth = 6; ctx.strokeStyle = rgba(C.care, 0.14);
+    ctx.beginPath(); ctx.arc(at.x, at.y, 36, 0, Math.PI * 2); ctx.stroke();
+    if (frac > 0) {
+      ctx.strokeStyle = col; ctx.lineCap = "round"; ctx.shadowColor = col; ctx.shadowBlur = 14;
+      ctx.beginPath(); ctx.arc(at.x, at.y, 36, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2); ctx.stroke();
+    }
+    const ta = -Math.PI / 2 + clamp((c.next_tick - shownClock) / c.interval_hours, 0, 1) * Math.PI * 2;
+    ctx.shadowBlur = 0; ctx.lineWidth = 2.5; ctx.strokeStyle = C.fg;
+    ctx.beginPath(); ctx.moveTo(at.x + Math.cos(ta) * 30, at.y + Math.sin(ta) * 30); ctx.lineTo(at.x + Math.cos(ta) * 43, at.y + Math.sin(ta) * 43); ctx.stroke();
     ctx.restore();
-    ctx.font = `600 12px ${font}`; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = ringColor;
-    ctx.fillText(`${c.people_remaining}/${c.initial_people} residents · tick ${hh(c.next_tick)}`, at.x, at.y + 58);
+    ctx.font = `600 12.5px ${font}`; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = col;
+    ctx.fillText(frac > 0 ? `covered to ${hh(c.last_visit + c.interval_hours)}` : `needs a visit by ${hh(c.next_tick)}`, at.x, at.y + 60);
   }
 
-  // incidents: rings shrink as the deadline approaches
-  const openByLoc = {};
-  state.incidents.filter(i => i.status === "open").forEach(i => (openByLoc[i.location_id] ||= []).push(i));
-  for (const [loc, list] of Object.entries(openByLoc)) {
+  // incidents: a ring that shrinks to the deadline
+  const byLoc = {};
+  state.incidents.filter(i => i.status === "open").forEach(i => (byLoc[i.location_id] ||= []).push(i));
+  for (const [loc, list] of Object.entries(byLoc)) {
     const at = px(loc);
     list.sort((a, b) => a.deadline - b.deadline).forEach((i, k) => {
-      const span = Math.max(1, i.deadline - i.created_at);
-      const left = clamp((i.deadline - shownClock) / span, 0, 1);
-      const r = 18 + 26 * left + k * 6;
-      const col = i.assigned_vehicle_id ? colors.incident : colors.bad;
+      const left = clamp((i.deadline - shownClock) / Math.max(1, i.deadline - i.created_at), 0, 1);
+      const r = 18 + 30 * left + k * 6;
+      const col = i.assigned_vehicle_id ? C.incident : C.bad;
       ctx.save();
-      ctx.lineWidth = 3 + 2 * pulse;
-      ctx.strokeStyle = alpha(col, 0.45 + 0.5 * pulse);
+      ctx.lineWidth = 2.5 + 2 * pulse; ctx.strokeStyle = rgba(col, 0.5 + 0.45 * pulse); ctx.shadowColor = col; ctx.shadowBlur = 16;
       ctx.beginPath(); ctx.arc(at.x, at.y, r, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
-      ctx.font = `700 12.5px ${font}`; ctx.textAlign = "center"; ctx.fillStyle = col;
+      ctx.font = `700 12.5px ${font}`; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = col;
       ctx.fillText(`${i.id} · ${i.people_at_risk} people · ${Math.max(0, i.deadline - state.clock)}h`, at.x, at.y - r - 8 - k * 15);
     });
   }
 
-  // locations
+  // nodes
   state.locations.forEach(l => {
-    const at = px(l.id);
-    const isCare = c && l.id === c.location_id;
-    ctx.beginPath(); ctx.arc(at.x, at.y, isCare ? 13 : 10, 0, Math.PI * 2);
-    ctx.fillStyle = colors.surface; ctx.fill();
-    ctx.lineWidth = 3; ctx.strokeStyle = isCare ? colors.care : colors.fg; ctx.stroke();
-    ctx.font = `600 13.5px ${font}`; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = colors.fg;
-    const below = isCare ? 76 : 30;
+    const at = px(l.id), isCare = c && l.id === c.location_id;
+    const ring = isCare ? C.care : C.search;
+    ctx.save();
+    ctx.shadowColor = ring; ctx.shadowBlur = 18;
+    ctx.beginPath(); ctx.arc(at.x, at.y, isCare ? 12 : 9, 0, Math.PI * 2);
+    ctx.fillStyle = C.bg; ctx.fill();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = ring; ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.arc(at.x, at.y, 3, 0, Math.PI * 2); ctx.fillStyle = ring; ctx.fill();
+    ctx.restore();
+    const below = isCare ? 78 : 30;
+    ctx.font = `600 13.5px ${font}`; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = C.fg;
     ctx.fillText(l.name, at.x, at.y + below);
-    ctx.font = `11px ${mono}`; ctx.fillStyle = colors.muted;
+    ctx.font = `11px ${mono}`; ctx.fillStyle = C.muted;
     ctx.fillText(l.id, at.x, at.y + below + 14);
   });
 
-  // vehicles with trails
-  vehicleSpots(shownClock).forEach(v => {
-    const t = v.t;
-    const col = v.status === "out_of_service" ? colors.bad : v.job === "incident" ? colors.incident : v.job === "care" ? colors.care : v.job === "move" ? colors.move : colors.fg;
-    if (v.moving) {
-      t.trail.push({ x: v.x, y: v.y, at: now });
-    }
+  // vehicles with glowing trails
+  spots.forEach(v => {
+    const t = v.t, down = t.status === "out_of_service";
+    const col = down ? C.bad : v.q ? (C[v.q.job] || C.move) : C.fg;
+    if (v.q) t.trail.push({ x: v.x, y: v.y, at: now });
     t.trail = t.trail.filter(q => now - q.at < TRAIL_MS);
     for (let i = 1; i < t.trail.length; i++) {
       const a = t.trail[i - 1], b = t.trail[i];
-      ctx.strokeStyle = alpha(col, 0.5 * (1 - (now - b.at) / TRAIL_MS));
-      ctx.lineWidth = 5; ctx.lineCap = "round";
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      line(a, b, rgba(col, 0.6 * (1 - (now - b.at) / TRAIL_MS)), 5, 0);
     }
-    ctx.beginPath(); ctx.arc(v.x, v.y, 9, 0, Math.PI * 2);
-    if (v.status === "out_of_service") {
-      ctx.fillStyle = colors.surface; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = colors.bad; ctx.stroke();
+    ctx.save();
+    ctx.beginPath(); ctx.arc(v.x, v.y, 8, 0, Math.PI * 2);
+    if (down) {
+      ctx.fillStyle = C.bg; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = C.bad; ctx.stroke();
       ctx.beginPath(); ctx.moveTo(v.x - 4, v.y - 4); ctx.lineTo(v.x + 4, v.y + 4); ctx.moveTo(v.x + 4, v.y - 4); ctx.lineTo(v.x - 4, v.y + 4); ctx.stroke();
     } else {
-      ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = colors.surface; ctx.stroke();
+      ctx.shadowColor = col; ctx.shadowBlur = 18; ctx.fillStyle = col; ctx.fill();
     }
-    ctx.font = `700 11px ${mono}`; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillStyle = colors.fg;
-    ctx.fillText(v.id.replace(/^VEH-/, ""), v.x + 13, v.y);
+    ctx.restore();
+    ctx.font = `700 11px ${mono}`; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillStyle = C.fg;
+    ctx.fillText(v.id.replace(/^VEH-/, ""), v.x + 12, v.y);
   });
 
-  // effects: bursts (save / miss / visit) and flashes (breakdown / cancel / care loss)
+  // bursts (saved, lost, care visit) and flashes (breakdown, cancel, care loss)
   for (let i = effects.length - 1; i >= 0; i--) {
-    const e = effects[i];
-    const k = (now - e.t0) / e.dur;
+    const e = effects[i], k = (now - e.t0) / e.dur;
     if (k >= 1) { effects.splice(i, 1); continue; }
     const at = px(e.at);
     ctx.save();
     if (e.kind === "burst") {
-      ctx.strokeStyle = alpha(e.color, 1 - k); ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.arc(at.x, at.y, 14 + 60 * ease(k), 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = rgba(e.color, 1 - k); ctx.lineWidth = 4; ctx.shadowColor = e.color; ctx.shadowBlur = 20;
+      ctx.beginPath(); ctx.arc(at.x, at.y, 14 + 64 * ease(k), 0, Math.PI * 2); ctx.stroke();
     } else {
-      ctx.fillStyle = alpha(e.color, 0.35 * (1 - k));
-      ctx.beginPath(); ctx.arc(at.x, at.y, 46, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = rgba(e.color, 0.35 * (1 - k));
+      ctx.beginPath(); ctx.arc(at.x, at.y, 48, 0, Math.PI * 2); ctx.fill();
     }
-    if (e.label) {
-      ctx.font = `700 14px ${font}`; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
-      ctx.fillStyle = alpha(e.color, 1 - k * k);
-      ctx.fillText(e.label, at.x, at.y - 50 - 20 * k);
-    }
+    ctx.shadowBlur = 0;
+    ctx.font = `700 14px ${font}`; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = rgba(e.color, 1 - k * k);
+    ctx.fillText(e.label, at.x, at.y - 52 - 20 * k);
     ctx.restore();
   }
 }
 
-// ------------------------------------------------------------------ start
-
 async function start() {
-  readColors();
-  engineUrl = DEFAULT_ENGINE;
   if (location.protocol !== "file:") {
     try { engineUrl = (await getJson("api/config")).engine || DEFAULT_ENGINE; } catch (e) { /* keep default */ }
   }
   resize();
   window.addEventListener("resize", resize);
-  if (window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readColors);
-  new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   requestAnimationFrame(frame);
   poll();
 }

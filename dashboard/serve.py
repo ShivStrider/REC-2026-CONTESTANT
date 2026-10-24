@@ -10,8 +10,8 @@ The page has two views:
     Replay  any finished decision log: timeline, incidents, full feed.
 
 Endpoints:
-    GET /                         dashboard/index.html
-    GET /map                      dashboard/map.html: live map of roads, vehicles, incidents, care home
+    GET /  (or /map)              dashboard/map.html: live map of roads, vehicles, incidents, care home
+    GET /numbers                  dashboard/index.html: live numbers and run replay
     GET /api/config               {"engine": "http://host:port"} for the live view
     GET /api/runs                 *.jsonl decision logs, newest first
     GET /decisions?file=F&since=N log records from line N of the newest log
@@ -93,10 +93,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         url = urlsplit(self.path)
         path, query = url.path, parse_qs(url.query)
-        if path in ("/", "/index.html"):
-            self._file(PAGE, "text/html; charset=utf-8")
-        elif path in ("/map", "/map.html"):
+        if path in ("/", "/map", "/map.html"):
             self._file(MAP_PAGE, "text/html; charset=utf-8")
+        elif path in ("/numbers", "/index.html"):
+            self._file(PAGE, "text/html; charset=utf-8")
         elif path == "/api/config":
             self._json(200, {"ok": True, "engine": ENGINE_URL, "runs_dir": str(RUNS_DIR)})
         elif path == "/api/runs":
