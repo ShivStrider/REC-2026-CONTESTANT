@@ -9,6 +9,11 @@ breakdowns appear in `/state` only when they happen. People are saved only if
 a vehicle arrives by the incident deadline, and the care home loses two
 residents every 24 hours unless a vehicle arrives there.
 
+## Requirements
+
+Python 3.10 or newer. Nothing to install: the engine, the planner, the bench
+and the dashboard use only the standard library.
+
 ## Run it
 
 Use `python3` instead of `python` on macOS and Linux.
@@ -19,11 +24,10 @@ Use `python3` instead of `python` on macOS and Linux.
 
 2. In a second terminal, run the planner:
 
-       python -m solutions.planner --port 8600 --scenario 7day
+       python -m solutions.planner --port 8600 --scenario 7day --profile full
 
-   `--scenario` resets the engine to that scenario first, so you can re-run
-   without restarting the server. Every decision is printed with its reason
-   and also saved to `runs/<scenario>_<profile>_<time>.jsonl`.
+   Every decision is printed with its reason and also saved to
+   `runs/<scenario>_<profile>_<time>.jsonl`.
 
 3. In a third terminal, open the dashboard to see the run:
 
@@ -34,6 +38,35 @@ Use `python3` instead of `python` on macOS and Linux.
    drop a `.jsonl` file onto it.
 
 For judging, use `--scenario 90day`. The API and the planner are the same.
+
+### Running again
+
+The engine keeps its state between runs. If it has already reached the end
+of the scenario, the planner stops with "engine is already at the horizon"
+rather than doing nothing silently. To start over without restarting the
+server, pass `--scenario 7day` (reset to that scenario) or `--reset` (reset
+to whatever scenario the engine is running).
+
+### Strategy profiles
+
+Each profile builds on the one before it. Pick one with `--profile`; the
+default is `full`.
+
+| Profile | 7-day saved | What it adds |
+|---|---|---|
+| `basic` | 88 / 108 | Earliest deadline first. Sends the vehicle that arrives soonest, and never one that would arrive after the deadline. |
+| `care` | 88 / 108 | Care-home visits timed to land exactly on the tick hour, an out-and-back relay when a vehicle is parked there, and recovery after breakdowns. No care-home residents lost. |
+| `full` | 108 / 108 | Searches for the assignment that saves the most people, cancels a trip only when that saves more, repositions idle vehicles, and replans in the same hour after instant arrivals. |
+
+### Reading a log line
+
+    H0052 d03 | DISPATCH    | VEH-AMB -> INC-006   | EDF: 10 people at LOC-6 East Ridge, arrive H42 <= deadline H42 ...
+
+From left to right: the hour (`H0052`) and day (`d03`), the action, the
+vehicle and its target (an incident or a location), and why the planner
+chose it. Lines marked `engine` are what the engine reported in between,
+such as an incident opening or a care-home tick. `REJECTED` means the
+engine refused an action; the planner logs it and replans next round.
 
 ### Planner options
 
