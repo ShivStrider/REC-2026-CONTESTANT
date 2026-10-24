@@ -24,6 +24,7 @@ from .decision_log import DecisionLog
 from .strategy import PROFILES, Action, Planner
 
 ROOT = Path(__file__).resolve().parent.parent
+DEMO_PACE = 2.0             # default seconds per step for the 7day scenario only
 
 
 def _retry(fn, *args, attempts: int = 3):
@@ -180,9 +181,11 @@ def main(argv: list[str] | None = None) -> int:
                     help=f"strategy profile (default: {PROFILES[-1]})")
     ap.add_argument("--log-dir", default=str(ROOT / "runs"),
                     help="where the JSONL decision log is written ('' to disable)")
-    ap.add_argument("--pace", type=float, default=float(env("REC_PACE", "0")),
+    ap.add_argument("--pace", type=float,
+                    default=float(env("REC_PACE")) if env("REC_PACE") else None,
                     help="seconds to pause after each advance, so the live dashboard "
-                         "can be watched (default 0 = full speed)")
+                         f"can be watched (default {DEMO_PACE} for the 7day demo, 0 = full "
+                         "speed for every other scenario)")
     ap.add_argument("--quiet", action="store_true", help="only print the final summary")
     ap.add_argument("--no-events", action="store_true",
                     help="hide engine events between decisions on stdout")
@@ -209,9 +212,13 @@ def main(argv: list[str] | None = None) -> int:
         path = Path(args.log_dir) / f"{scenario}_{args.profile}_{stamp}.jsonl"
     log = DecisionLog(path, quiet=args.quiet, show_events=not args.no_events)
     planner = Planner(args.profile, log)
+    # the 7-day run is the live demo, slowed so it can be explained; longer runs go full speed
+    pace = args.pace if args.pace is not None else (DEMO_PACE if scenario == "7day" else 0.0)
+    if pace > 0:
+        print(f"pace {pace:g}s per step (--pace 0 for full speed)", file=sys.stderr)
     try:
         report = run(client, planner, log, label=f"{scenario}/{args.profile}",
-                     pace=max(0.0, args.pace))
+                     pace=max(0.0, pace))
     except KeyboardInterrupt:
         print("\ninterrupted - engine left as is; re-run with --reset to start over",
               file=sys.stderr)

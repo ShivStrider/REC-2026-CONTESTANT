@@ -5,147 +5,196 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>REC 2026 Live Map</title>
 <style>
-/* One dark look on purpose: a glowing road graph on a near-black field, readable on a projector.
-   Map on the left, live numbers in a side panel, the planner's reasoning as subtitles underneath.
-   System fonts only, so it works offline on the demo laptop. */
+/* Apple HIG pass. The map is content: an opaque canvas that fills the window.
+   The controls float above it on one layer of glass (toolbar, sidebar, subtitles), never glass on glass.
+   Light and dark follow the system; Reduce Transparency, Increase Contrast and Reduce Motion each have an answer.
+   System font only, so it works offline on the demo laptop. */
 :root {
-  color-scheme: dark;
-  --bg: #070b12;
-  --panel: rgba(13, 20, 31, 0.92);
-  --fg: #e6edf5;
-  --muted: #8494a7;
-  --rule: #1d2a3a;
-  --edge: #2c4a66;
-  --search: #39d0ff;
-  --incident: #4ea8ff;
-  --care: #c58bff;
-  --move: #9fb0c2;
-  --ok: #3ee08f;
-  --bad: #ff5a5a;
-  --warn: #ffc24a;
-  --font-body: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "Cascadia Mono", Consolas, ui-monospace, "SF Mono", Menlo, monospace;
+  --canvas: #f2f2f7;            /* map background (content layer, opaque) */
+  --fg: #1d1d1f;                /* label */
+  --muted: #6e6e73;             /* secondary label, 5.1:1 on white */
+  --rule: rgba(60, 60, 67, 0.18);
+  --edge: #a1a1a6;              /* open road */
+  --dot: rgba(60, 60, 67, 0.10);
+  --search: #0091c2;            /* route search wave */
+  --incident: #0066cc;          /* trip to an incident, assigned incident */
+  --care: #8944ab;              /* care-home trip and dial */
+  --move: #8e8e93;              /* repositioning */
+  --ok: #248a3d;
+  --bad: #d70015;
+  --warn: #b25000;
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-edge: rgba(0, 0, 0, 0.08);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.10);
+  --glow: 0;                    /* soft glow on lines, dark appearance only */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+  color-scheme: light;
 }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #0e0e10; --fg: #f5f5f7; --muted: #98989d; --rule: rgba(84, 84, 88, 0.55); --edge: #545458;
+    --dot: rgba(235, 235, 245, 0.07); --search: #64d2ff; --incident: #0a84ff; --care: #bf5af2; --move: #98989d;
+    --ok: #30d158; --bad: #ff453a; --warn: #ff9f0a;
+    --glass: rgba(30, 30, 32, 0.68); --glass-edge: rgba(255, 255, 255, 0.10); --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    --glow: 0.6; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --canvas: #0e0e10; --fg: #f5f5f7; --muted: #98989d; --rule: rgba(84, 84, 88, 0.55); --edge: #545458;
+  --dot: rgba(235, 235, 245, 0.07); --search: #64d2ff; --incident: #0a84ff; --care: #bf5af2; --move: #98989d;
+  --ok: #30d158; --bad: #ff453a; --warn: #ff9f0a;
+  --glass: rgba(30, 30, 32, 0.68); --glass-edge: rgba(255, 255, 255, 0.10); --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --glow: 0.6; color-scheme: dark;
+}
+@media (prefers-contrast: more) {
+  :root { --rule: rgba(60, 60, 67, 0.45); --glass-edge: rgba(0, 0, 0, 0.35); --edge: #6e6e73; }
+}
+
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
-body {
-  margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 var(--font-body);
-  display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr) 340px;
-  grid-template-areas: "top top" "map side" "subs side";
-}
-.top { grid-area: top; display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; justify-content: space-between;
-  padding: 12px max(16px, 2vw); border-bottom: 1px solid var(--rule); }
-.eyebrow { font: 600 11px var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--search); }
-h1 { margin: 0; font-size: 18px; font-weight: 650; }
-.clock { font: 700 26px var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
-.clock small { font-size: 14px; color: var(--muted); font-weight: 400; margin-left: 8px; }
-.progress { width: min(320px, 40vw); height: 4px; background: var(--rule); border-radius: 4px; overflow: hidden; margin-top: 6px; }
-.progress > div { height: 100%; width: 0; background: var(--search); box-shadow: 0 0 8px var(--search); }
-.status { display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--muted); }
-.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
-.dot.ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); } .dot.bad { background: var(--bad); } .dot.done { background: var(--search); }
-a.back { color: var(--fg); text-decoration: none; border: 1px solid var(--rule); border-radius: 6px; padding: 5px 10px; font-size: 13px; }
-a.back:hover, a.back:focus-visible { border-color: var(--search); outline: none; }
+body { margin: 0; background: var(--canvas); color: var(--fg); font: 15px/1.4 var(--font); font-variant-numeric: tabular-nums; overflow: hidden; }
 
-.stage { grid-area: map; position: relative; min-height: 360px; }
+/* content layer */
+.stage { position: fixed; inset: 0; }
 canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.legend { position: absolute; left: 14px; bottom: 12px; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); max-width: calc(100% - 28px); }
-.legend span::before { content: ""; display: inline-block; width: 16px; height: 0; border-top: 3px solid var(--c); margin-right: 6px; vertical-align: middle; }
+
+/* functional layer: one sheet of glass per control group */
+.glass {
+  position: fixed; z-index: 2;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(30px) saturate(1.4); backdrop-filter: blur(30px) saturate(1.4);
+  border: 1px solid var(--glass-edge); border-radius: 16px; box-shadow: var(--glass-shadow);
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root { --glass: #ffffff; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --glass: #1c1c1e; } }
+  .glass { -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+.toolbar { top: 12px; left: 12px; right: 376px; display: flex; flex-wrap: wrap; gap: 6px 24px; align-items: center; justify-content: space-between; padding: 10px 16px; }
+.toolbar .title { display: grid; gap: 0; min-width: 0; }
+.toolbar h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.toolbar .sub { font-size: 13px; color: var(--muted); }
+.clock { display: grid; gap: 4px; }
+.clock b { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.clock b small { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 8px; letter-spacing: 0; }
+.progress { width: min(280px, 32vw); height: 4px; background: var(--rule); border-radius: 4px; overflow: hidden; }
+.progress > div { height: 100%; width: 0; background: var(--fg); border-radius: 4px; }
+.status { display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.done { background: var(--incident); }
+.button { display: inline-flex; align-items: center; min-height: 28px; padding: 4px 12px; border-radius: 8px; font: 500 13px var(--font);
+  color: var(--fg); text-decoration: none; background: var(--rule); }
+.button:hover { background: color-mix(in srgb, var(--fg) 14%, transparent); }
+.button:focus-visible { outline: 3px solid color-mix(in srgb, var(--incident) 60%, transparent); outline-offset: 2px; }
+
+.sidebar { top: 12px; right: 12px; bottom: 12px; width: 352px; overflow: auto; padding: 16px; display: grid; gap: 20px; align-content: start; }
+.sidebar h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.score { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.num { display: grid; }
+.num b { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
+.num b small { font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+.num span { font-size: 13px; color: var(--muted); }
+.num.lead { grid-column: 1 / -1; }
+.num.lead b { font-size: 34px; }
+.list { display: grid; }
+.item { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--rule); font-size: 14px; }
+.item:first-child { border-top: 0; }
+.item i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); align-self: center; }
+.item .what { min-width: 0; overflow-wrap: anywhere; }
+.item .what small { display: block; color: var(--muted); font-size: 13px; }
+.item .val { font-size: 13px; font-weight: 600; text-align: right; }
+.val.bad { color: var(--bad); } .val.warn { color: var(--warn); } .val.ok { color: var(--ok); }
+.empty { color: var(--muted); font-size: 13px; }
+
+.legend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 13px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 16px; height: 0; border-top: 3px solid var(--c); margin-right: 6px; vertical-align: middle; border-radius: 2px; }
 .legend span.dash::before { border-top-style: dashed; }
 
-.side { grid-area: side; border-left: 1px solid var(--rule); background: var(--panel); overflow: auto; padding: 16px; display: grid; gap: 18px; align-content: start; }
-.side h2 { margin: 0 0 8px; font: 600 11px var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
-.score { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.num { display: grid; gap: 0; }
-.num b { font: 700 28px var(--font-mono); font-variant-numeric: tabular-nums; }
-.num b small { font-size: 14px; color: var(--muted); font-weight: 400; }
-.num span { font-size: 12.5px; color: var(--muted); }
-.num.big { grid-column: 1 / -1; }
-.num.big b { font-size: 40px; color: var(--ok); text-shadow: 0 0 14px rgba(62, 224, 143, .35); }
-.list { display: grid; gap: 6px; }
-.item { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; font-size: 14px; }
-.item i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c); align-self: center; }
-.item .what { min-width: 0; overflow-wrap: anywhere; }
-.item .what small { display: block; color: var(--muted); font-size: 12.5px; }
-.item .val { font: 600 13px var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
-.val.bad { color: var(--bad); } .val.warn { color: var(--warn); } .val.ok { color: var(--ok); }
-.empty { color: var(--muted); font-size: 13.5px; }
-
-.subs { grid-area: subs; padding: 10px max(16px, 2vw) 14px; border-top: 1px solid var(--rule); min-height: 74px; display: grid; gap: 4px; align-content: start; }
-.sub { display: grid; grid-template-columns: 92px 118px minmax(0, 1fr); gap: 10px; font-size: 16px; }
-.sub.old { opacity: .45; font-size: 14px; }
-.sub .h { font-family: var(--font-mono); color: var(--muted); font-size: 13px; padding-top: 2px; }
-.sub .k { font: 700 12.5px var(--font-mono); color: var(--search); padding-top: 2px; }
-.sub .k.bad { color: var(--bad); }
-.sub .t { min-width: 0; overflow-wrap: anywhere; }
-.sub .w { font-family: var(--font-mono); font-size: 13.5px; margin-right: 6px; color: var(--muted); }
+.subs { left: 12px; right: 376px; bottom: 12px; padding: 10px 16px; min-height: 80px; display: grid; gap: 4px; align-content: start; }
+.subline { display: grid; grid-template-columns: 88px 112px minmax(0, 1fr); gap: 10px; font-size: 15px; }
+.subline.old { color: var(--muted); font-size: 13px; }
+.subline .h { color: var(--muted); font-size: 13px; padding-top: 1px; }
+.subline .k { font-size: 12px; font-weight: 600; color: var(--incident); padding-top: 2px; letter-spacing: 0.02em; }
+.subline .k.bad { color: var(--bad); }
+.subline .t { min-width: 0; overflow-wrap: anywhere; }
+.subline .w { color: var(--muted); margin-right: 6px; }
 
 @media (max-width: 900px) {
-  body { grid-template-columns: 1fr; grid-template-rows: auto 60vh auto auto; grid-template-areas: "top" "map" "subs" "side"; }
-  .side { border-left: 0; border-top: 1px solid var(--rule); }
-  .sub { grid-template-columns: 1fr; gap: 0; }
+  body { overflow: auto; }
+  .stage { position: relative; height: 62vh; }
+  .glass { position: static; margin: 8px 12px; }
+  .toolbar { right: auto; }
+  .sidebar { width: auto; overflow: visible; }
+  .subline { grid-template-columns: 1fr; gap: 0; }
 }
 </style>
 </head>
 <body>
-<header class="top">
-  <div>
-    <div class="eyebrow">REC 2026 · Emergency response</div>
-    <h1 id="scenario">Waiting for the engine</h1>
-  </div>
-  <div>
-    <div class="clock"><span id="cDay">Day -</span><small id="cHour"></small></div>
-    <div class="progress" aria-hidden="true"><div id="bar"></div></div>
-  </div>
-  <div class="status"><span class="dot" id="dot"></span><span id="status">Connecting...</span><a class="back" href="numbers">Numbers</a></div>
-</header>
-
 <div class="stage" id="stage">
   <canvas id="map" role="img" aria-label="Road network with vehicles, incidents and the care home"></canvas>
-  <div class="legend" aria-hidden="true">
-    <span style="--c: var(--search)">route search</span>
-    <span style="--c: var(--incident)">to an incident</span>
-    <span style="--c: var(--care)">care-home trip</span>
-    <span style="--c: var(--move)">repositioning</span>
-    <span class="dash" style="--c: var(--warn)">restricted ×1.5</span>
-    <span style="--c: var(--bad)">closed</span>
-  </div>
 </div>
 
-<aside class="side" aria-label="Live numbers">
+<header class="glass toolbar">
+  <div class="title">
+    <h1 id="scenario">Waiting for the engine</h1>
+    <div class="sub">REC 2026 emergency response</div>
+  </div>
+  <div class="clock">
+    <b><span id="cDay">Day -</span><small id="cHour"></small></b>
+    <div class="progress" aria-hidden="true"><div id="bar"></div></div>
+  </div>
+  <div class="status"><span class="dot" id="dot"></span><span id="status">Connecting</span><a class="button" href="numbers">Numbers</a></div>
+</header>
+
+
+<aside class="glass sidebar" aria-label="Live numbers">
   <section>
     <h2>Score</h2>
     <div class="score">
-      <div class="num big"><b id="nSaved">-</b><span>people saved, care residents included</span></div>
-      <div class="num"><b id="nLost">-</b><span>lost to missed deadlines</span></div>
-      <div class="num"><b id="nCare">-</b><span>care residents alive</span></div>
+      <div class="num lead"><b id="nSaved">-</b><span>People saved, care residents included</span></div>
+      <div class="num"><b id="nLost">-</b><span>Lost to missed deadlines</span></div>
+      <div class="num"><b id="nCare">-</b><span>Care residents alive</span></div>
     </div>
   </section>
   <section><h2>Vehicles</h2><div class="list" id="vehicles"></div></section>
   <section><h2>Open incidents</h2><div class="list" id="incidents"><div class="empty">None right now.</div></div></section>
+  <section>
+    <h2>Key</h2>
+    <div class="legend">
+      <span style="--c: var(--search)">Route search</span>
+      <span style="--c: var(--incident)">To an incident</span>
+      <span style="--c: var(--care)">Care-home trip</span>
+      <span style="--c: var(--move)">Repositioning</span>
+      <span class="dash" style="--c: var(--warn)">Restricted road ×1.5</span>
+      <span style="--c: var(--bad)">Closed road</span>
+    </div>
+  </section>
 </aside>
 
-<div class="subs" id="subs"><div class="empty">The planner's latest decisions and its reasons appear here.</div></div>
+<div class="glass subs" id="subs" aria-live="polite"><div class="empty">The planner's latest decisions and its reasons appear here.</div></div>
 
 <script>
 "use strict";
 const DEFAULT_ENGINE = "http://127.0.0.1:8600";
 const RESTRICTED = 1.5;
 const TRAIL_MS = 1400;
-const SEARCH_MS = 1300;                        // how long a route search takes to spread
+const SEARCH_MS = 2000;                        // how long a route search takes to spread
 const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 const C = {};
-(() => {
+function readColors() {                       // the canvas follows the system appearance like the rest of the page
   const cs = getComputedStyle(document.documentElement);
-  for (const k of ["bg", "fg", "muted", "rule", "edge", "search", "incident", "care", "move", "ok", "bad", "warn"]) C[k] = cs.getPropertyValue("--" + k).trim();
-})();
+  for (const k of ["canvas", "fg", "muted", "edge", "dot", "search", "incident", "care", "move", "ok", "bad", "warn"]) C[k] = cs.getPropertyValue("--" + k).trim();
+  C.glow = parseFloat(cs.getPropertyValue("--glow")) || 0;
+  bgDots = null;
+}
 
 let engineUrl = DEFAULT_ENGINE;
 let state = null, report = null;
 let layoutKey = "", pos = {};
 let view = { scale: 1, ox: 0, oy: 0 };
-let shownClock = 0, animFrom = 0, animTo = 0, animStart = 0, animDur = 1;
+let shownClock = 0, animFrom = 0, animTo = 0, animStart = 0, animDur = 1, lastStepAt = 0;
 const tracks = {};                             // vehicle id -> {queue, trail, status, loc}
 const searches = [];                           // route-search waves still on screen
 const effects = [];                            // bursts and flashes
@@ -247,10 +296,15 @@ function fitView(w, h) {
   if (!pts.length) return;
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   pts.forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); });
-  const padX = Math.min(130, w * 0.14), padTop = 80, padBottom = 90;
+  // keep the graph clear of the floating toolbar, sidebar and subtitles
+  const floating = getComputedStyle(document.querySelector(".sidebar")).position === "fixed";
+  const left = 70, right = floating ? 376 + 60 : 70;
+  const top = floating ? document.querySelector(".toolbar").getBoundingClientRect().bottom + 50 : 50;
+  const bottom = floating ? h - document.querySelector(".subs").getBoundingClientRect().top + 110 : 60;
+  const aw = Math.max(80, w - left - right), ah = Math.max(80, h - top - bottom);
   const sw = Math.max(1, maxX - minX), sh = Math.max(1, maxY - minY);
-  const scale = Math.min((w - 2 * padX) / sw, (h - padTop - padBottom) / sh);
-  view = { scale, ox: padX + ((w - 2 * padX) - sw * scale) / 2 - minX * scale, oy: padTop + ((h - padTop - padBottom) - sh * scale) / 2 - minY * scale };
+  const scale = Math.min(aw / sw, ah / sh);
+  view = { scale, ox: left + (aw - sw * scale) / 2 - minX * scale, oy: top + (ah - sh * scale) / 2 - minY * scale };
 }
 const px = id => { const p = pos[id] || { x: 0, y: 0 }; return { x: view.ox + p.x * view.scale, y: view.oy + p.y * view.scale }; };
 
@@ -289,12 +343,16 @@ function ingest(st, rep) {
   if (key !== layoutKey) { layoutKey = key; pos = computeLayout(st.locations, st.roads); resize(); }
   if (reset) {
     for (const k in tracks) delete tracks[k];
-    prevInc = {}; prevCare = null; effects.length = 0; searches.length = 0; firstState = true;
+    prevInc = {}; prevCare = null; effects.length = 0; searches.length = 0; firstState = true; lastStepAt = 0;
     shownClock = animFrom = animTo = st.clock;
   }
   if (st.clock !== animTo) {
+    // spread each step over the time the planner takes between steps (its --pace),
+    // so vehicles keep moving instead of jumping and then waiting
+    const gap = lastStepAt ? now - lastStepAt : 650;
+    lastStepAt = now;
     animFrom = shownClock; animTo = st.clock; animStart = now;
-    animDur = reduceMotion ? 1 : clamp((animTo - animFrom) * 140, 350, 650);
+    animDur = reduceMotion ? 1 : clamp(gap * 0.9, 350, 5000);
   }
 
   st.vehicles.forEach(v => {
@@ -396,7 +454,7 @@ function renderSubs() {
   const last = decisions.slice(-2).reverse();
   if (!last.length) return;
   box.replaceChildren(...last.map((d, i) => {
-    const row = el("div", "sub" + (i ? " old" : ""));
+    const row = el("div", "subline" + (i ? " old" : ""));
     const isDec = d.type === "decision";
     const kind = isDec ? d.action : d.kind.replace("_", " ");
     row.append(el("div", "h", `${hh(d.hour)} d${String(Math.floor(d.hour / 24) + 1).padStart(2, "0")}`),
@@ -431,10 +489,8 @@ function background() {
     bgDots.width = canvas.width; bgDots.height = canvas.height;
     const b = bgDots.getContext("2d");
     b.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const g = b.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.7);
-    g.addColorStop(0, "#0d1624"); g.addColorStop(1, C.bg);
-    b.fillStyle = g; b.fillRect(0, 0, W, H);
-    b.fillStyle = "rgba(120, 150, 190, 0.10)";
+    b.fillStyle = C.canvas; b.fillRect(0, 0, W, H);
+    b.fillStyle = C.dot;
     for (let x = 12; x < W; x += 24) for (let y = 12; y < H; y += 24) b.fillRect(x, y, 1.5, 1.5);
   }
   ctx.drawImage(bgDots, 0, 0, W, H);
@@ -442,7 +498,7 @@ function background() {
 function line(a, b, color, width, glow, dash) {
   ctx.save();
   ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = "round";
-  if (glow) { ctx.shadowColor = color; ctx.shadowBlur = glow; }
+  if (glow) { ctx.shadowColor = color; ctx.shadowBlur = (glow) * C.glow; }
   if (dash) ctx.setLineDash(dash);
   ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
   ctx.restore();
@@ -491,7 +547,7 @@ function drawSearches(now) {
     for (const [id, d] of Object.entries(sr.dist)) {
       if (d > front) continue;
       const p = px(id);
-      ctx.save(); ctx.fillStyle = rgba(C.search, 0.35 * fade); ctx.shadowColor = C.search; ctx.shadowBlur = 16 * fade;
+      ctx.save(); ctx.fillStyle = rgba(C.search, 0.35 * fade); ctx.shadowColor = C.search; ctx.shadowBlur = (16 * fade) * C.glow;
       ctx.beginPath(); ctx.arc(p.x, p.y, 15, 0, Math.PI * 2); ctx.fill(); ctx.restore();
     }
     // the chosen route lights up once the search reaches the target
@@ -530,7 +586,7 @@ function vehicleSpots(clock) {
 function frame(now) {
   requestAnimationFrame(frame);
   background();
-  const font = getComputedStyle(document.body).fontFamily, mono = "Consolas, ui-monospace, monospace";
+  const font = getComputedStyle(document.body).fontFamily, mono = font;
   if (!state) {
     ctx.fillStyle = C.muted; ctx.font = `15px ${font}`; ctx.textAlign = "center";
     ctx.fillText("Start the engine to see the map: python -m engine.server --scenario 7day --port 8600", W / 2, H / 2);
@@ -548,13 +604,13 @@ function frame(now) {
     else line(a, b, C.edge, 2.5, 6);
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
     if (r.status === "closed") {
-      ctx.save(); ctx.strokeStyle = C.bad; ctx.lineWidth = 3; ctx.shadowColor = C.bad; ctx.shadowBlur = 10;
+      ctx.save(); ctx.strokeStyle = C.bad; ctx.lineWidth = 3; ctx.shadowColor = C.bad; ctx.shadowBlur = (10) * C.glow;
       ctx.beginPath(); ctx.moveTo(mx - 7, my - 7); ctx.lineTo(mx + 7, my + 7); ctx.moveTo(mx + 7, my - 7); ctx.lineTo(mx - 7, my + 7); ctx.stroke(); ctx.restore();
     } else {
       const label = r.status === "restricted" ? `${r.hours}h ×1.5` : `${r.hours}h`;
       ctx.font = `12px ${mono}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       const w = ctx.measureText(label).width + 10;
-      ctx.fillStyle = C.bg; ctx.fillRect(mx - w / 2, my - 9, w, 18);
+      ctx.fillStyle = C.canvas; ctx.fillRect(mx - w / 2, my - 9, w, 18);
       ctx.fillStyle = r.status === "restricted" ? C.warn : C.muted; ctx.fillText(label, mx, my);
     }
   });
@@ -575,12 +631,19 @@ function frame(now) {
   if (c) {
     const at = px(c.location_id);
     const frac = clamp(((c.last_visit >= 0 ? c.last_visit + c.interval_hours : 0) - shownClock) / c.interval_hours, 0, 1);
-    const col = c.people_remaining <= 0 ? C.muted : frac > 0.34 ? C.care : frac > 0 ? C.warn : C.bad;
+    const coming = state.vehicles.find(v => v.mission && v.mission.target === c.location_id && v.mission.arrival <= c.next_tick);
+    const toTick = c.next_tick - state.clock;
+    const col = c.people_remaining <= 0 ? C.muted : frac > 0 || coming ? C.care : toTick > 12 ? C.warn : C.bad;
+    const careText = c.people_remaining <= 0 ? "no residents left"
+      : state.clock >= state.horizon_hours ? `${c.people_remaining} residents at the end of the run`
+      : frac > 0 ? `covered to ${hh(c.last_visit + c.interval_hours)}`
+      : coming ? `${coming.id} arrives ${hh(coming.mission.arrival)}, tick ${hh(c.next_tick)}`
+      : `needs a visit by ${hh(c.next_tick)}`;
     ctx.save();
     ctx.lineWidth = 6; ctx.strokeStyle = rgba(C.care, 0.14);
     ctx.beginPath(); ctx.arc(at.x, at.y, 36, 0, Math.PI * 2); ctx.stroke();
     if (frac > 0) {
-      ctx.strokeStyle = col; ctx.lineCap = "round"; ctx.shadowColor = col; ctx.shadowBlur = 14;
+      ctx.strokeStyle = col; ctx.lineCap = "round"; ctx.shadowColor = col; ctx.shadowBlur = (14) * C.glow;
       ctx.beginPath(); ctx.arc(at.x, at.y, 36, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2); ctx.stroke();
     }
     const ta = -Math.PI / 2 + clamp((c.next_tick - shownClock) / c.interval_hours, 0, 1) * Math.PI * 2;
@@ -588,7 +651,7 @@ function frame(now) {
     ctx.beginPath(); ctx.moveTo(at.x + Math.cos(ta) * 30, at.y + Math.sin(ta) * 30); ctx.lineTo(at.x + Math.cos(ta) * 43, at.y + Math.sin(ta) * 43); ctx.stroke();
     ctx.restore();
     ctx.font = `600 12.5px ${font}`; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = col;
-    ctx.fillText(frac > 0 ? `covered to ${hh(c.last_visit + c.interval_hours)}` : `needs a visit by ${hh(c.next_tick)}`, at.x, at.y + 60);
+    ctx.fillText(careText, at.x, at.y + 60);
   }
 
   // incidents: a ring that shrinks to the deadline
@@ -601,7 +664,7 @@ function frame(now) {
       const r = 18 + 30 * left + k * 6;
       const col = i.assigned_vehicle_id ? C.incident : C.bad;
       ctx.save();
-      ctx.lineWidth = 2.5 + 2 * pulse; ctx.strokeStyle = rgba(col, 0.5 + 0.45 * pulse); ctx.shadowColor = col; ctx.shadowBlur = 16;
+      ctx.lineWidth = 2.5 + 2 * pulse; ctx.strokeStyle = rgba(col, 0.5 + 0.45 * pulse); ctx.shadowColor = col; ctx.shadowBlur = (16) * C.glow;
       ctx.beginPath(); ctx.arc(at.x, at.y, r, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
       ctx.font = `700 12.5px ${font}`; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = col;
@@ -614,9 +677,9 @@ function frame(now) {
     const at = px(l.id), isCare = c && l.id === c.location_id;
     const ring = isCare ? C.care : C.search;
     ctx.save();
-    ctx.shadowColor = ring; ctx.shadowBlur = 18;
+    ctx.shadowColor = ring; ctx.shadowBlur = (18) * C.glow;
     ctx.beginPath(); ctx.arc(at.x, at.y, isCare ? 12 : 9, 0, Math.PI * 2);
-    ctx.fillStyle = C.bg; ctx.fill();
+    ctx.fillStyle = C.canvas; ctx.fill();
     ctx.lineWidth = 2.5; ctx.strokeStyle = ring; ctx.stroke();
     ctx.shadowBlur = 0;
     ctx.beginPath(); ctx.arc(at.x, at.y, 3, 0, Math.PI * 2); ctx.fillStyle = ring; ctx.fill();
@@ -641,10 +704,10 @@ function frame(now) {
     ctx.save();
     ctx.beginPath(); ctx.arc(v.x, v.y, 8, 0, Math.PI * 2);
     if (down) {
-      ctx.fillStyle = C.bg; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = C.bad; ctx.stroke();
+      ctx.fillStyle = C.canvas; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = C.bad; ctx.stroke();
       ctx.beginPath(); ctx.moveTo(v.x - 4, v.y - 4); ctx.lineTo(v.x + 4, v.y + 4); ctx.moveTo(v.x + 4, v.y - 4); ctx.lineTo(v.x - 4, v.y + 4); ctx.stroke();
     } else {
-      ctx.shadowColor = col; ctx.shadowBlur = 18; ctx.fillStyle = col; ctx.fill();
+      ctx.shadowColor = col; ctx.shadowBlur = (18) * C.glow; ctx.fillStyle = col; ctx.fill();
     }
     ctx.restore();
     ctx.font = `700 11px ${mono}`; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillStyle = C.fg;
@@ -658,7 +721,7 @@ function frame(now) {
     const at = px(e.at);
     ctx.save();
     if (e.kind === "burst") {
-      ctx.strokeStyle = rgba(e.color, 1 - k); ctx.lineWidth = 4; ctx.shadowColor = e.color; ctx.shadowBlur = 20;
+      ctx.strokeStyle = rgba(e.color, 1 - k); ctx.lineWidth = 4; ctx.shadowColor = e.color; ctx.shadowBlur = (20) * C.glow;
       ctx.beginPath(); ctx.arc(at.x, at.y, 14 + 64 * ease(k), 0, Math.PI * 2); ctx.stroke();
     } else {
       ctx.fillStyle = rgba(e.color, 0.35 * (1 - k));
@@ -676,8 +739,11 @@ async function start() {
   if (location.protocol !== "file:") {
     try { engineUrl = (await getJson("api/config")).engine || DEFAULT_ENGINE; } catch (e) { /* keep default */ }
   }
+  readColors();
   resize();
   window.addEventListener("resize", resize);
+  if (window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readColors);
+  new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   requestAnimationFrame(frame);
   poll();
 }

@@ -7,39 +7,41 @@
 <style>
 /* Dispatch-console layout: summary first, then the vehicle timeline, then the detail tables.
    System fonts only, so the page works offline on the demo laptop. */
+/* Apple HIG pass: system colours and the system font, light and dark from the OS. */
 :root {
-  --bg: #f4f5f2;
+  --bg: #f2f2f7;
   --surface: #ffffff;
-  --fg: #1d2327;
-  --muted: #5d6970;
-  --line: #d7dcd8;
-  --grid: #e9ece9;
-  --accent: #b9410f;
-  --incident: #2f6fb0;
-  --care: #8a4fb8;
-  --move: #7c8a92;
-  --ok: #2c7a4b;
-  --bad: #c0352b;
-  --warn: #a06c00;
-  --oos: rgba(192, 53, 43, 0.14);
-  --font-body: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "Cascadia Mono", Consolas, ui-monospace, "SF Mono", Menlo, monospace;
+  --fg: #1d1d1f;
+  --muted: #6e6e73;
+  --line: rgba(60, 60, 67, 0.18);
+  --grid: #e5e5ea;
+  --accent: #1d1d1f;
+  --incident: #0066cc;
+  --care: #8944ab;
+  --move: #8e8e93;
+  --ok: #248a3d;
+  --bad: #d70015;
+  --warn: #b25000;
+  --oos: rgba(215, 0, 21, 0.12);
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+  --font-mono: var(--font-body);   /* system font with tabular digits; code keeps a real monospace */
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #121618; --surface: #1a2023; --fg: #e3e7e5; --muted: #98a4aa; --line: #2c3539; --grid: #222a2d;
-    --accent: #f08a50; --incident: #6aa6e4; --care: #c08ae6; --move: #8e9aa1;
-    --ok: #63c08b; --bad: #f07368; --warn: #e2b450; --oos: rgba(240, 115, 104, 0.16);
+    --bg: #0e0e10; --surface: #1c1c1e; --fg: #f5f5f7; --muted: #98989d; --line: rgba(84, 84, 88, 0.55); --grid: #2c2c2e;
+    --accent: #f5f5f7; --incident: #0a84ff; --care: #bf5af2; --move: #98989d;
+    --ok: #30d158; --bad: #ff453a; --warn: #ff9f0a; --oos: rgba(255, 69, 58, 0.16);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #121618; --surface: #1a2023; --fg: #e3e7e5; --muted: #98a4aa; --line: #2c3539; --grid: #222a2d;
-  --accent: #f08a50; --incident: #6aa6e4; --care: #c08ae6; --move: #8e9aa1;
-  --ok: #63c08b; --bad: #f07368; --warn: #e2b450; --oos: rgba(240, 115, 104, 0.16);
+  --bg: #0e0e10; --surface: #1c1c1e; --fg: #f5f5f7; --muted: #98989d; --line: rgba(84, 84, 88, 0.55); --grid: #2c2c2e;
+  --accent: #f5f5f7; --incident: #0a84ff; --care: #bf5af2; --move: #98989d;
+  --ok: #30d158; --bad: #ff453a; --warn: #ff9f0a; --oos: rgba(255, 69, 58, 0.16);
   color-scheme: dark;
 }
+@media (prefers-contrast: more) { :root { --line: rgba(60, 60, 67, 0.45); } }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--font-body); }
@@ -132,6 +134,15 @@ tbody tr:hover td { background: var(--grid); }
 .care-facts dd { margin: 0; font-variant-numeric: tabular-nums; }
 td.left-bad { color: var(--bad); font-weight: 700; } td.left-warn { color: var(--warn); font-weight: 600; }
 @media (max-width: 560px) { .row { grid-template-columns: 1fr; gap: 2px; } }
+/* labels in sentence case and the system font; one corner radius */
+.eyebrow, .tile .label, th { font-family: var(--font-body); text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; }
+.eyebrow { color: var(--muted); }
+.panel, .tile, .tablewrap, .feed, .drop, .vcard { border-radius: 12px; }
+select, input[type="search"], button, .maplink { border-radius: 8px; min-height: 28px; }
+.tile.headline { border-color: var(--line); }
+.row.decision .kind { color: var(--incident); }
+body { font-variant-numeric: tabular-nums; }
+code { font-family: "SF Mono", ui-monospace, Menlo, "Cascadia Mono", Consolas, monospace; }
 </style>
 </head>
 <body>
@@ -872,6 +883,7 @@ function renderLive(st, rep) {
       .map(v => `${v.id} arrives ${hh(v.mission.arrival)}`);
     let status, cls;
     if (c.people_remaining <= 0) { status = "no residents left"; cls = "bad"; }
+    else if (finished) { status = "run finished"; cls = "ok"; }
     else if (covered) { status = `covered for the ${hh(c.next_tick)} tick`; cls = "ok"; }
     else if (enRoute.length) { status = `visit on the way: ${enRoute.join(", ")}`; cls = "warn"; }
     else { status = `needs a vehicle to arrive by ${hh(c.next_tick)}`; cls = (c.next_tick - clock) <= 12 ? "bad" : "warn"; }

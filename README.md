@@ -33,8 +33,9 @@ Use `python3` instead of `python` on macOS and Linux.
 
        python -m dashboard --engine-port 8600
 
-   Start it before the planner, and run the planner with `--pace 0.5`, to
-   watch the run as it happens. The front page is the live map. The
+   Start it before the planner to watch the run as it happens. The 7-day
+   run is slowed to 2 seconds a step by default so it can be followed.
+   The front page is the live map. The
    **Numbers** button (http://127.0.0.1:8700/numbers) opens the live
    numbers and the **Replay a run** tab, which opens any finished log in
    `runs/`. You can also open `dashboard/index.html` straight from disk and
@@ -82,7 +83,7 @@ next round, so a bug never stops a run before the end of the scenario.
 | `--scenario NAME` | none | Reset the engine to this scenario before running |
 | `--reset` | off | Reset the engine to its current scenario |
 | `--profile NAME` | the most complete one | Strategy profile; `--help` lists them |
-| `--pace SECONDS` | `0` | Pause after each step so the live dashboard can be watched; `0.2` makes a 7-day run take about 15 seconds |
+| `--pace SECONDS` | `2` for `7day`, `0` otherwise | Pause after each step so the live dashboard can be followed. The 7-day run is the demo, so it defaults to 2 seconds a step (about 2½ minutes in all); 90-day and other runs go at full speed. `--pace 0` runs the 7-day scenario at full speed |
 | `--log-dir DIR` | `runs/` | Where the decision log goes (`''` turns it off) |
 | `--quiet` | off | Print only the final summary |
 | `--no-events` | off | Hide engine events between decisions |
