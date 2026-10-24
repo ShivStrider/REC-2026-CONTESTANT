@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REC 2026 Run Dashboard</title>
+<style>
+/* Dispatch-console layout: summary first, then the vehicle timeline, then the detail tables.
+   System fonts only, so the page works offline on the demo laptop. */
+:root {
+  --bg: #f4f5f2;
+  --surface: #ffffff;
+  --fg: #1d2327;
+  --muted: #5d6970;
+  --line: #d7dcd8;
+  --grid: #e9ece9;
+  --accent: #b9410f;
+  --incident: #2f6fb0;
+  --care: #8a4fb8;
+  --move: #7c8a92;
+  --ok: #2c7a4b;
+  --bad: #c0352b;
+  --warn: #a06c00;
+  --oos: rgba(192, 53, 43, 0.14);
+  --font-body: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121618; --surface: #1a2023; --fg: #e3e7e5; --muted: #98a4aa; --line: #2c3539; --grid: #222a2d;
+    --accent: #f08a50; --incident: #6aa6e4; --care: #c08ae6; --move: #8e9aa1;
+    --ok: #63c08b; --bad: #f07368; --warn: #e2b450; --oos: rgba(240, 115, 104, 0.16);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121618; --surface: #1a2023; --fg: #e3e7e5; --muted: #98a4aa; --line: #2c3539; --grid: #222a2d;
+  --accent: #f08a50; --incident: #6aa6e4; --care: #c08ae6; --move: #8e9aa1;
+  --ok: #63c08b; --bad: #f07368; --warn: #e2b450; --oos: rgba(240, 115, 104, 0.16);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--font-body); }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 24px max(16px, 2vw) 64px; display: grid; gap: 24px; }
+h1, h2 { margin: 0; line-height: 1.2; text-wrap: balance; }
+h1 { font-size: 24px; font-weight: 700; }
+h2 { font-size: 17px; font-weight: 650; }
+.mono, code { font-family: var(--font-mono); font-size: 0.9em; }
+.muted { color: var(--muted); }
+header.top { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; }
+.eyebrow { font: 600 12px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+.picker { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+select, input[type="search"], button {
+  font: inherit; color: var(--fg); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px;
+}
+button { cursor: pointer; }
+button:hover, select:hover { border-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 12px; min-width: 0; align-content: start; }
+.panel-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 2px; }
+.tile .label { font: 600 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.tile .value { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tile .value small { font-size: 15px; font-weight: 500; color: var(--muted); }
+.tile .sub { font-size: 13px; color: var(--muted); }
+.tile.headline { border-color: var(--accent); }
+.tile.headline .value { color: var(--accent); }
+.scroll { overflow-x: auto; }
+svg text { fill: var(--fg); font-family: var(--font-body); }
+svg .axis { fill: var(--muted); font-size: 11px; font-family: var(--font-mono); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 12px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 11px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); position: sticky; top: 0; background: var(--surface); }
+td.num { font-variant-numeric: tabular-nums; text-align: right; }
+th.num { text-align: right; }
+tbody tr { cursor: pointer; }
+tbody tr:hover td { background: var(--grid); }
+.pill { display: inline-block; font: 600 11px var(--font-mono); padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.pill.ok { color: var(--ok); } .pill.bad { color: var(--bad); } .pill.warn { color: var(--warn); } .pill.open { color: var(--muted); }
+.feed-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.feed { max-height: 560px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+.row { display: grid; grid-template-columns: 92px 118px minmax(0, 1fr); gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--grid); font-size: 14px; }
+.row:last-child { border-bottom: 0; }
+.row .when { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.row .kind { font: 600 11.5px var(--font-mono); letter-spacing: .03em; overflow-wrap: anywhere; }
+.row .what { min-width: 0; overflow-wrap: anywhere; }
+.row .who { font-family: var(--font-mono); font-size: 12.5px; margin-right: 6px; }
+.row.engine .kind { color: var(--muted); }
+.row.problem .kind { color: var(--bad); }
+.row.decision .kind { color: var(--accent); }
+.drop { border: 2px dashed var(--line); border-radius: 8px; padding: 40px 20px; text-align: center; color: var(--muted); display: grid; gap: 8px; justify-items: center; }
+.drop.over { border-color: var(--accent); color: var(--fg); }
+.error { color: var(--bad); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 24px; }
+@media (max-width: 560px) { .row { grid-template-columns: 1fr; gap: 2px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">REC 2026 · Emergency Response</div>
+      <h1 id="title">Run dashboard</h1>
+      <div class="muted" id="subtitle">Open a decision log from <code>runs/</code> to see how the planner played it.</div>
+    </div>
+    <div class="picker">
+      <label for="runSelect" class="muted" id="runLabel" hidden>Run</label>
+      <select id="runSelect" hidden></select>
+      <button type="button" id="openBtn">Open .jsonl file</button>
+      <input type="file" id="fileInput" accept=".jsonl,.json,.txt" hidden>
+    </div>
+  </header>
+
+  <div id="empty" class="drop">
+    <strong>Drop a decision log here</strong>
+    <span>Run the planner (it writes <code>runs/&lt;scenario&gt;_&lt;profile&gt;_&lt;time&gt;.jsonl</code>), then start <code>python -m dashboard.serve</code> or drop the file onto this page.</span>
+    <span class="error" id="loadError"></span>
+  </div>
+
+  <div id="report" hidden>
+    <div class="wrap" style="padding:0">
+      <section class="tiles" id="tiles" aria-label="Run summary"></section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Vehicle timeline</h2>
+          <div class="legend">
+            <span style="--c: var(--incident)">incident response</span>
+            <span style="--c: var(--care)">care-home trip</span>
+            <span style="--c: var(--move)">reposition</span>
+            <span style="--c: var(--oos)">out of service</span>
+            <span style="--c: var(--ok)">saved</span>
+            <span style="--c: var(--bad)">missed or care loss</span>
+          </div>
+        </div>
+        <div class="scroll" id="timeline"></div>
+        <div class="muted" style="font-size:13px">Each bar is one trip, from departure to arrival. A faded bar was cancelled or cut short by a breakdown at the dark mark. Click a bar or an incident to filter the decision feed.</div>
+      </section>
+
+      <div class="two">
+        <section class="panel">
+          <div class="panel-head"><h2>People saved and lost over time</h2><span class="muted mono" id="chartNote"></span></div>
+          <div id="chart"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Decisions by type</h2></div>
+          <div id="counts"></div>
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Incidents</h2><span class="muted" id="incNote"></span></div>
+        <div class="scroll" style="max-height:440px; overflow:auto">
+          <table id="incTable">
+            <thead><tr>
+              <th>Incident</th><th>Location</th><th class="num">People</th><th class="num">Opened</th>
+              <th class="num">Deadline</th><th>Responder</th><th class="num">Arrived</th><th class="num">Slack</th><th>Outcome</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" id="feedPanel">
+        <div class="panel-head"><h2>Decision feed</h2><span class="muted" id="feedCount"></span></div>
+        <div class="feed-controls" role="group" aria-label="Filter feed">
+          <button type="button" class="chip" data-filter="all" aria-pressed="true">Everything</button>
+          <button type="button" class="chip" data-filter="decision" aria-pressed="false">Our decisions</button>
+          <button type="button" class="chip" data-filter="engine" aria-pressed="false">Engine events</button>
+          <button type="button" class="chip" data-filter="problem" aria-pressed="false">Problems</button>
+          <input type="search" id="search" placeholder="Filter: INC-006, VEH-AMB, care..." aria-label="Search the feed">
+        </div>
+        <div class="feed" id="feed"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const SVGNS = "http://www.w3.org/2000/svg";
+const PROBLEM = new Set(["REJECTED", "WARNING", "ERROR", "incident_missed", "chronic_loss", "late_arrival"]);
+const RX = {
+  open: /^NEW INCIDENT (\S+): (.*?) — (\d+) people at (\S+), deadline hour (\d+)/,
+  resolved: /^(\S+) arrived at (\S+) — (\d+) people saved/,
+  missed: /^DEADLINE (\S+) — (\d+) people lost/,
+  late: /^(\S+) arrived at (\S+) after its outcome/,
+  careLoss: /— (\d+) resident\(s\) lost .*?; (\d+) remaining\)/,
+  oos: /^(\S+) OUT OF SERVICE/,
+  back: /^(\S+) back in service/,
+};
+
+let run = null;           // parsed run, see parseRun()
+let names = {};           // id -> display name from the scenario file, when served
+let feedFilter = "all";
+
+// ---------------------------------------------------------------- parsing
+
+function parseJsonl(text) {
+  const out = [];
+  text.split(/\r?\n/).forEach((line, i) => {
+    if (!line.trim()) return;
+    try { out.push(JSON.parse(line)); }
+    catch (e) { throw new Error(`line ${i + 1} is not valid JSON`); }
+  });
+  if (!out.length) throw new Error("the file is empty");
+  if (!out.some(r => r.type === "decision" || r.type === "event")) throw new Error("no decision or event records found; is this a planner decision log?");
+  return out;
+}
+
+function parseRun(records, fileName) {
+  const summary = records.find(r => r.type === "summary") || null;
+  const incidents = new Map();
+  const trips = [];
+  const oos = [];
+  const care = [];
+  const series = [];            // {hour, saved, lost}
+  const counts = {};
+  const vehicles = new Set();
+  let saved = 0, lost = 0, maxHour = 0;
+
+  for (const r of records) {
+    if (typeof r.hour === "number") maxHour = Math.max(maxHour, r.hour);
+    if (r.type === "decision") {
+      counts[r.action] = (counts[r.action] || 0) + 1;
+      if (r.vehicle) vehicles.add(r.vehicle);
+      const res = r.result || {};
+      if (r.action === "CANCEL" && r.vehicle) {
+        const t = lastOpenTrip(trips, r.vehicle, r.hour);
+        if (t) t.cutAt = r.hour;
+      } else if (r.vehicle && typeof res.arrival_hour === "number") {
+        const kind = r.action.startsWith("CARE") ? "care" : (res.incident_id ? "incident" : "move");
+        trips.push({ vehicle: r.vehicle, start: r.hour, end: res.arrival_hour, kind, target: r.target, reason: r.reason, action: r.action, cutAt: null, late: false });
+        maxHour = Math.max(maxHour, res.arrival_hour);
+        if (res.incident_id && incidents.has(res.incident_id)) {
+          const inc = incidents.get(res.incident_id);
+          inc.responder = r.vehicle; inc.arrival = res.arrival_hour;
+        }
+      }
+      continue;
+    }
+    if (r.type !== "event") continue;
+    const m = (re) => re.exec(r.text || "");
+    let x;
+    switch (r.kind) {
+      case "incident_open":
+        if ((x = m(RX.open))) incidents.set(x[1], { id: x[1], title: x[2], people: +x[3], loc: x[4], opened: r.hour, deadline: +x[5], status: "open", responder: null, arrival: null });
+        break;
+      case "incident_resolved":
+        if ((x = m(RX.resolved))) {
+          vehicles.add(x[1]);
+          const inc = incidents.get(x[2]);
+          if (inc) { inc.status = "resolved"; inc.responder = x[1]; inc.arrival = r.hour; }
+          saved += +x[3]; series.push({ hour: r.hour, saved, lost });
+        }
+        break;
+      case "incident_missed":
+        if ((x = m(RX.missed))) {
+          const inc = incidents.get(x[1]);
+          if (inc) inc.status = "missed";
+          lost += +x[2]; series.push({ hour: r.hour, saved, lost });
+        }
+        break;
+      case "late_arrival":
+        if ((x = m(RX.late))) {
+          const t = trips.filter(t => t.vehicle === x[1] && t.target === x[2]).pop();
+          if (t) t.late = true;
+        }
+        break;
+      case "chronic_ok":
+        care.push({ hour: r.hour, ok: true, lost: 0 });
+        break;
+      case "chronic_loss":
+        x = m(RX.careLoss);
+        care.push({ hour: r.hour, ok: false, lost: x ? +x[1] : 0, remaining: x ? +x[2] : null });
+        if (x) { lost += +x[1]; series.push({ hour: r.hour, saved, lost }); }
+        break;
+      case "vehicle_status":
+        if ((x = m(RX.oos))) {
+          vehicles.add(x[1]);
+          const t = lastOpenTrip(trips, x[1], r.hour);
+          if (t) t.cutAt = r.hour;
+          oos.push({ vehicle: x[1], start: r.hour, end: null, text: r.text });
+        } else if ((x = m(RX.back))) {
+          vehicles.add(x[1]);
+          const span = oos.filter(o => o.vehicle === x[1] && o.end === null).pop();
+          if (span) span.end = r.hour;
+          else oos.push({ vehicle: x[1], start: 0, end: r.hour, text: "out of service from the start" });
+        }
+        break;
+    }
+  }
+  const horizon = (summary && summary.horizon_hours) || Math.max(24, Math.ceil(maxHour / 24) * 24);
+  oos.forEach(o => { if (o.end === null) o.end = horizon; });
+  return {
+    fileName, records, summary, horizon, incidents: [...incidents.values()], trips, oos, care, series, counts,
+    vehicles: [...vehicles].sort(),
+    scenarioId: (summary && summary.scenario_id) || (fileName || "").split("_")[0] || "",
+  };
+}
+
+function lastOpenTrip(trips, vehicle, hour) {
+  for (let i = trips.length - 1; i >= 0; i--) {
+    const t = trips[i];
+    if (t.vehicle === vehicle && t.cutAt === null && t.start <= hour && t.end > hour) return t;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------- helpers
+
+function el(tag, attrs = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") n.className = v; else if (k === "text") n.textContent = v; else n.setAttribute(k, v);
+  }
+  kids.forEach(k => n.append(k));
+  return n;
+}
+function svg(tag, attrs = {}) {
+  const n = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  return n;
+}
+function tip(node, text) { const t = svg("title"); t.textContent = text; node.append(t); return node; }
+const hh = h => "H" + String(h).padStart(4, "0");
+const day = h => "d" + String(Math.floor(h / 24) + 1).padStart(2, "0");
+const nm = id => (id && names[id]) ? `${id} ${names[id]}` : (id || "");
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+// ---------------------------------------------------------------- rendering
+
+function render() {
+  document.getElementById("empty").hidden = true;
+  document.getElementById("report").hidden = false;
+  const s = run.summary;
+  document.getElementById("title").textContent = s ? `${s.title || s.scenario_id} · ${s.label}` : run.fileName;
+  document.getElementById("subtitle").textContent =
+    `${run.fileName} · ${run.horizon / 24} days · ${run.records.length} log records` + (s ? "" : " · no summary line (run did not finish?)");
+  renderTiles(); renderTimeline(); renderChart(); renderCounts(); renderIncidents(); renderFeed();
+}
+
+function renderTiles() {
+  const s = run.summary;
+  const box = document.getElementById("tiles");
+  box.replaceChildren();
+  const tile = (label, value, total, sub, cls = "") => {
+    const v = el("div", { class: "value" }, String(value));
+    if (total !== null) v.append(el("small", { text: ` / ${total}` }));
+    box.append(el("div", { class: "tile " + cls }, el("div", { class: "label", text: label }), v, el("div", { class: "sub", text: sub })));
+  };
+  const resolved = run.incidents.filter(i => i.status === "resolved").length;
+  const missed = run.incidents.filter(i => i.status === "missed");
+  const careLost = run.care.reduce((a, c) => a + c.lost, 0);
+  const careOk = run.care.filter(c => c.ok).length;
+  if (s) {
+    const pct = s.people_at_risk_total ? Math.round(100 * s.people_saved_total / s.people_at_risk_total) : 0;
+    tile("People saved", s.people_saved_total, s.people_at_risk_total, `${pct}% of everyone at risk`, "headline");
+    tile("Incident people saved", s.people_saved, s.people_saved + s.people_lost_incidents, `${s.people_lost_incidents} lost to missed deadlines`);
+    tile("Care home alive", s.chronic_remaining, s.chronic_remaining + s.people_lost_chronic, `${s.people_lost_chronic} lost, ${careOk}/${run.care.length} ticks covered`);
+  } else {
+    tile("Incident people saved", run.series.length ? run.series[run.series.length - 1].saved : 0, null, "from engine events");
+    tile("Care home lost", careLost, null, `${careOk}/${run.care.length} ticks covered`);
+  }
+  tile("Incidents resolved", resolved, run.incidents.length, missed.length ? `missed: ${missed.map(i => i.id).join(", ")}` : "none missed");
+  const rejected = (run.counts.REJECTED || 0) + (run.counts.WARNING || 0) + (run.counts.ERROR || 0);
+  tile("Rejected or late actions", rejected, null, rejected ? "see Problems in the feed" : "every action accepted, none late");
+}
+
+function renderTimeline() {
+  const host = document.getElementById("timeline");
+  host.replaceChildren();
+  const H = run.horizon;
+  const labelW = 96, rowH = 30, barH = 16, top = 26;
+  const avail = Math.max(320, host.clientWidth - labelW - 12);
+  const px = Math.max(avail / H, 1.1);              // px per hour; long runs scroll sideways
+  const plotW = H * px;
+  const lanes = [...run.vehicles.map(v => ({ id: v, label: v, type: "vehicle" })),
+                 { id: "_inc", label: "Incidents", type: "incidents" },
+                 { id: "_care", label: "Care ticks", type: "care" }];
+  // incident lane may need several sub-rows so overlapping windows stay readable
+  const incRows = packIncidents(run.incidents);
+  const incLaneRows = Math.max(1, Math.max(0, ...incRows.map(r => r.row)) + 1);
+  const laneHeights = lanes.map(l => l.type === "incidents" ? Math.max(rowH, incLaneRows * 12 + 10) : rowH);
+  const totalH = top + laneHeights.reduce((a, b) => a + b, 0) + 8;
+  const W = labelW + plotW + 12;
+  const s = svg("svg", { width: W, height: totalH, viewBox: `0 0 ${W} ${totalH}`, role: "img", "aria-label": "Vehicle timeline" });
+  const x = h => labelW + h * px;
+
+  // day grid
+  const days = H / 24;
+  const labelEvery = days <= 14 ? 1 : days <= 45 ? 3 : 7;
+  for (let d = 0; d <= days; d++) {
+    s.append(svg("line", { x1: x(d * 24), x2: x(d * 24), y1: top - 6, y2: totalH - 4, stroke: css("--grid"), "stroke-width": 1 }));
+    if (d < days && d % labelEvery === 0) {
+      const t = svg("text", { x: x(d * 24) + 3, y: top - 10, class: "axis" }); t.textContent = `day ${d + 1}`; s.append(t);
+    }
+  }
+
+  let y = top;
+  lanes.forEach((lane, li) => {
+    const h = laneHeights[li];
+    const lab = svg("text", { x: 0, y: y + h / 2 + 4, "font-size": 12, "font-weight": 600 }); lab.textContent = lane.label; s.append(lab);
+    s.append(svg("line", { x1: labelW, x2: labelW + plotW, y1: y + h, y2: y + h, stroke: css("--line"), "stroke-width": 1 }));
+    const by = y + (h - barH) / 2;
+    if (lane.type === "vehicle") {
+      run.oos.filter(o => o.vehicle === lane.id).forEach(o => {
+        s.append(tip(svg("rect", { x: x(o.start), y: y + 2, width: Math.max(1, (o.end - o.start) * px), height: h - 4, fill: css("--oos") }),
+          `${lane.id} out of service ${hh(o.start)}–${hh(o.end)}\n${o.text}`));
+      });
+      run.trips.filter(t => t.vehicle === lane.id).forEach(t => {
+        const color = css(t.kind === "incident" ? "--incident" : t.kind === "care" ? "--care" : "--move");
+        const w = Math.max(2, (t.end - t.start) * px);
+        const g = svg("g", { style: "cursor:pointer" });
+        g.append(svg("rect", { x: x(t.start), y: by, width: w, height: barH, rx: 3, fill: color, opacity: (t.cutAt !== null || t.late) ? 0.35 : 0.9 }));
+        if (t.cutAt !== null) g.append(svg("rect", { x: x(t.cutAt) - 1, y: by - 3, width: 3, height: barH + 6, fill: css("--fg") }));
+        const status = t.cutAt !== null ? `\ncut short at ${hh(t.cutAt)}` : t.late ? "\narrived after the outcome (wasted trip)" : "";
+        tip(g, `${t.action} ${t.vehicle} -> ${nm(t.target)}\n${hh(t.start)} to ${hh(t.end)} (${t.end - t.start}h)${status}\n${t.reason || ""}`);
+        g.addEventListener("click", () => focusFeed(t.target || t.vehicle));
+        s.append(g);
+      });
+    } else if (lane.type === "incidents") {
+      incRows.forEach(({ inc, row }) => {
+        const color = css(inc.status === "resolved" ? "--ok" : inc.status === "missed" ? "--bad" : "--muted");
+        const yy = y + 6 + row * 12;
+        const g = svg("g", { style: "cursor:pointer" });
+        g.append(svg("rect", { x: x(inc.opened), y: yy, width: Math.max(2, (inc.deadline - inc.opened) * px), height: 8, rx: 2, fill: color, opacity: 0.8 }));
+        tip(g, `${inc.id} ${inc.title}\n${inc.people} people at ${nm(inc.loc)}\nopen ${hh(inc.opened)}, deadline ${hh(inc.deadline)}: ${inc.status}`);
+        g.addEventListener("click", () => focusFeed(inc.id));
+        s.append(g);
+      });
+    } else {
+      run.care.forEach(c => {
+        const w = Math.max(3, 24 * px - 2);
+        s.append(tip(svg("rect", { x: x(c.hour) - w, y: by, width: w, height: barH, rx: 2, fill: css(c.ok ? "--ok" : "--bad"), opacity: c.ok ? 0.55 : 0.9 }),
+          `care tick ${hh(c.hour)}: ${c.ok ? "visited in window, no losses" : `${c.lost} resident(s) lost` + (c.remaining !== null && c.remaining !== undefined ? `, ${c.remaining} remaining` : "")}`));
+      });
+    }
+    y += h;
+  });
+  host.append(s);
+}
+
+function packIncidents(incs) {
+  const rowsEnd = [];
+  return [...incs].sort((a, b) => a.opened - b.opened).map(inc => {
+    let row = rowsEnd.findIndex(end => end <= inc.opened);
+    if (row === -1) { row = rowsEnd.length; rowsEnd.push(0); }
+    rowsEnd[row] = inc.deadline;
+    return { inc, row };
+  });
+}
+
+function renderChart() {
+  const host = document.getElementById("chart");
+  host.replaceChildren();
+  const W = Math.max(320, host.clientWidth || 460), Hh = 200, L = 40, R = 64, T = 12, B = 26;
+  const H = run.horizon;
+  const pts = [{ hour: 0, saved: 0, lost: 0 }, ...run.series];
+  const last = pts[pts.length - 1];
+  const maxY = Math.max(1, last.saved, last.lost);
+  const x = h => L + (h / H) * (W - L - R);
+  const y = v => T + (1 - v / maxY) * (Hh - T - B);
+  const s = svg("svg", { width: "100%", viewBox: `0 0 ${W} ${Hh}`, role: "img", "aria-label": "Cumulative people saved and lost" });
+  const step = 10 ** Math.floor(Math.log10(maxY));
+  const tick = maxY / step > 5 ? step * 2 : step;
+  for (let v = 0; v <= maxY; v += tick) {
+    s.append(svg("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: css("--grid") }));
+    const t = svg("text", { x: L - 6, y: y(v) + 4, "text-anchor": "end", class: "axis" }); t.textContent = v; s.append(t);
+  }
+  const days = H / 24, every = days <= 14 ? 1 : days <= 45 ? 7 : 14;
+  for (let d = 0; d <= days; d += every) {
+    const t = svg("text", { x: x(d * 24), y: Hh - 8, "text-anchor": "middle", class: "axis" }); t.textContent = `d${d + 1}`; s.append(t);
+  }
+  const path = key => {
+    let d = `M${x(0)},${y(0)}`, prev = 0;
+    pts.forEach(p => { d += ` L${x(p.hour)},${y(prev)} L${x(p.hour)},${y(p[key])}`; prev = p[key]; });
+    return d + ` L${x(H)},${y(prev)}`;
+  };
+  [["saved", "--ok", "saved"], ["lost", "--bad", "lost"]].forEach(([key, color, label]) => {
+    s.append(svg("path", { d: path(key), fill: "none", stroke: css(color), "stroke-width": 2.2 }));
+    s.append(svg("circle", { cx: x(H), cy: y(last[key]), r: 3.5, fill: css(color) }));
+    const t = svg("text", { x: x(H) + 7, y: y(last[key]) + 4, "font-size": 12, "font-weight": 600, fill: css(color) });
+    t.textContent = `${last[key]} ${label}`; s.append(t);
+  });
+  host.append(s);
+  document.getElementById("chartNote").textContent = "incident saves vs incident + care losses";
+}
+
+function renderCounts() {
+  const host = document.getElementById("counts");
+  host.replaceChildren();
+  const entries = Object.entries(run.counts).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) { host.append(el("div", { class: "muted", text: "No decisions in this log." })); return; }
+  const max = entries[0][1];
+  const t = el("table");
+  const tb = el("tbody");
+  entries.forEach(([k, v]) => {
+    const bar = el("div", { style: `height:10px;border-radius:3px;width:${Math.max(2, 100 * v / max)}%;background:var(${PROBLEM.has(k) ? "--bad" : k.startsWith("CARE") ? "--care" : k === "DISPATCH" ? "--incident" : "--move"})` });
+    const tr = el("tr", {}, el("td", { class: "mono", text: k }), el("td", { class: "num", text: String(v) }), el("td", { style: "width:55%" }, bar));
+    tr.addEventListener("click", () => focusFeed(k));
+    tb.append(tr);
+  });
+  t.append(tb); host.append(t);
+}
+
+function renderIncidents() {
+  const tb = document.querySelector("#incTable tbody");
+  tb.replaceChildren();
+  const incs = [...run.incidents].sort((a, b) => a.opened - b.opened || a.deadline - b.deadline);
+  incs.forEach(i => {
+    const slack = i.status === "resolved" && i.arrival !== null ? i.deadline - i.arrival : null;
+    const cls = i.status === "resolved" ? "ok" : i.status === "missed" ? "bad" : "open";
+    const tr = el("tr", {},
+      el("td", {}, el("span", { class: "mono", text: i.id }), el("br"), el("span", { class: "muted", text: i.title })),
+      el("td", { text: nm(i.loc) }),
+      el("td", { class: "num", text: String(i.people) }),
+      el("td", { class: "num mono", text: hh(i.opened) }),
+      el("td", { class: "num mono", text: hh(i.deadline) }),
+      el("td", { class: "mono", text: i.responder || "none" }),
+      el("td", { class: "num mono", text: i.arrival !== null ? hh(i.arrival) : "" }),
+      el("td", { class: "num", text: slack !== null ? `${slack}h` : "" }),
+      el("td", {}, el("span", { class: "pill " + cls, text: i.status })));
+    tr.addEventListener("click", () => focusFeed(i.id));
+    tb.append(tr);
+  });
+  const peopleMissed = incs.filter(i => i.status === "missed").reduce((a, i) => a + i.people, 0);
+  document.getElementById("incNote").textContent = `${incs.length} incidents · ${peopleMissed} people in missed incidents`;
+}
+
+function feedRows() {
+  return run.records.filter(r => r.type === "decision" || r.type === "event").map(r => {
+    const isDecision = r.type === "decision";
+    const kind = isDecision ? r.action : r.kind;
+    const cat = PROBLEM.has(kind) ? "problem" : isDecision ? "decision" : "engine";
+    const who = isDecision ? [r.vehicle, r.target].filter(Boolean).join(" -> ") : "";
+    const text = isDecision ? (r.reason || "") : (r.text || "");
+    return { r, kind, cat, isDecision, who, text, hay: `${kind} ${who} ${text}`.toLowerCase() };
+  });
+}
+
+function renderFeed() {
+  const host = document.getElementById("feed");
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  const rows = feedRows().filter(x =>
+    (feedFilter === "all" || x.cat === feedFilter || (feedFilter === "decision" && x.isDecision)) && (!q || x.hay.includes(q)));
+  const frag = document.createDocumentFragment();
+  rows.forEach(x => {
+    const what = el("div", { class: "what" });
+    if (x.who) what.append(el("span", { class: "who", text: x.who }));
+    what.append(document.createTextNode(x.text));
+    frag.append(el("div", { class: `row ${x.cat}` },
+      el("div", { class: "when", text: `${hh(x.r.hour)} ${day(x.r.hour)}` }),
+      el("div", { class: "kind", text: x.kind }), what));
+  });
+  host.replaceChildren(frag);
+  if (!rows.length) host.append(el("div", { class: "row" }, el("div"), el("div"), el("div", { class: "muted", text: "Nothing matches this filter." })));
+  document.getElementById("feedCount").textContent = `${rows.length} of ${run.records.length} records`;
+}
+
+function focusFeed(term) {
+  document.getElementById("search").value = term || "";
+  setFilter("all");
+  document.getElementById("feedPanel").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+}
+
+function setFilter(f) {
+  feedFilter = f;
+  document.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", String(c.dataset.filter === f)));
+  renderFeed();
+}
+
+// ---------------------------------------------------------------- loading
+
+async function loadScenarioNames(sid) {
+  names = {};
+  if (!sid || location.protocol === "file:") return;
+  try {
+    const res = await fetch(`scenario/${encodeURIComponent(sid)}`);
+    if (!res.ok) return;
+    const sc = await res.json();
+    (sc.locations || []).forEach(l => { names[l.id] = l.name; });
+    (sc.vehicles || []).forEach(v => { names[v.id] = v.name; });
+  } catch (e) { /* names are optional */ }
+}
+
+async function loadText(text, fileName) {
+  const errBox = document.getElementById("loadError");
+  try {
+    run = parseRun(parseJsonl(text), fileName);
+    errBox.textContent = "";
+  } catch (e) {
+    errBox.textContent = `Could not read ${fileName}: ${e.message}`;
+    document.getElementById("empty").hidden = false;
+    document.getElementById("report").hidden = true;
+    return;
+  }
+  await loadScenarioNames(run.scenarioId);
+  render();
+}
+
+async function listRuns() {
+  if (location.protocol === "file:") return;
+  try {
+    const res = await fetch("api/runs");
+    if (!res.ok) return;
+    const data = await res.json();
+    const sel = document.getElementById("runSelect");
+    sel.replaceChildren();
+    if (!data.runs.length) {
+      document.getElementById("loadError").textContent = `No logs in ${data.dir} yet. Run the planner first.`;
+      return;
+    }
+    data.runs.forEach(r => sel.append(el("option", { value: r.name, text: `${r.name} (${new Date(r.mtime * 1000).toLocaleString()})` })));
+    sel.hidden = false; document.getElementById("runLabel").hidden = false;
+    sel.addEventListener("change", () => loadServed(sel.value));
+    loadServed(data.runs[0].name);
+  } catch (e) { /* not served: file picker and drag-and-drop still work */ }
+}
+
+async function loadServed(name) {
+  try {
+    const res = await fetch(`runs/${encodeURIComponent(name)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await loadText(await res.text(), name);
+  } catch (e) {
+    document.getElementById("loadError").textContent = `Could not load ${name}: ${e.message}`;
+  }
+}
+
+function readFile(file) {
+  const fr = new FileReader();
+  fr.onload = () => loadText(String(fr.result), file.name);
+  fr.onerror = () => { document.getElementById("loadError").textContent = `Could not read ${file.name}.`; };
+  fr.readAsText(file);
+}
+
+document.getElementById("openBtn").addEventListener("click", () => document.getElementById("fileInput").click());
+document.getElementById("fileInput").addEventListener("change", e => { if (e.target.files[0]) readFile(e.target.files[0]); });
+document.querySelectorAll(".chip").forEach(c => c.addEventListener("click", () => setFilter(c.dataset.filter)));
+document.getElementById("search").addEventListener("input", renderFeed);
+const drop = document.getElementById("empty");
+["dragenter", "dragover"].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+document.addEventListener("drop", e => { const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) readFile(f); });
+let resizeTimer = null;
+window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (run) { renderTimeline(); renderChart(); } }, 150); });
+if (window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (run) { renderTimeline(); renderChart(); renderCounts(); } });
+listRuns();
+</script>
+</body>
+</html>
