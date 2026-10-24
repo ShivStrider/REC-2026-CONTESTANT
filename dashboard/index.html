@@ -103,6 +103,8 @@ tbody tr:hover td { background: var(--grid); }
 .tabs { display: flex; gap: 6px; }
 .tabs button { font-weight: 600; padding: 8px 16px; }
 .tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.maplink { font-weight: 600; padding: 8px 16px; border: 1px solid var(--accent); border-radius: 6px; color: var(--accent); text-decoration: none; }
+.maplink:hover, .maplink:focus-visible { background: var(--accent); color: var(--bg); outline: none; }
 .replay-head { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; }
 .replay-title { font-size: 20px; }
 /* live view: sized for a projector */
@@ -142,6 +144,7 @@ td.left-bad { color: var(--bad); font-weight: 700; } td.left-warn { color: var(-
     <nav class="tabs" role="tablist" aria-label="Views">
       <button type="button" role="tab" id="tab-live" data-view="live" aria-selected="true">Live</button>
       <button type="button" role="tab" id="tab-replay" data-view="replay" aria-selected="false">Replay a run</button>
+      <a class="maplink" href="map">Live map</a>
     </nav>
   </header>
 

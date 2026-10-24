@@ -11,6 +11,7 @@ The page has two views:
 
 Endpoints:
     GET /                         dashboard/index.html
+    GET /map                      dashboard/map.html: live map of roads, vehicles, incidents, care home
     GET /api/config               {"engine": "http://host:port"} for the live view
     GET /api/runs                 *.jsonl decision logs, newest first
     GET /decisions?file=F&since=N log records from line N of the newest log
@@ -31,6 +32,7 @@ from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
 PAGE = Path(__file__).resolve().parent / "index.html"
+MAP_PAGE = Path(__file__).resolve().parent / "map.html"
 SAFE_NAME = re.compile(r"^[A-Za-z0-9_.-]+$")
 MAX_RECORDS = 2000                  # per /decisions reply; the page asks again for the rest
 
@@ -93,6 +95,8 @@ class Handler(BaseHTTPRequestHandler):
         path, query = url.path, parse_qs(url.query)
         if path in ("/", "/index.html"):
             self._file(PAGE, "text/html; charset=utf-8")
+        elif path in ("/map", "/map.html"):
+            self._file(MAP_PAGE, "text/html; charset=utf-8")
         elif path == "/api/config":
             self._json(200, {"ok": True, "engine": ENGINE_URL, "runs_dir": str(RUNS_DIR)})
         elif path == "/api/runs":

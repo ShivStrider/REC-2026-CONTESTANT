@@ -78,6 +78,33 @@ def apply_action(client, planner: Planner, log: DecisionLog, clock: int,
     return res
 
 
+def safe_decide(planner: Planner, fallback: Planner | None, log: DecisionLog,
+                state: dict) -> list[Action]:
+    """A bug in the strategy must never end the run. If decide() raises, log
+    it and decide this round with the basic profile; if that fails too, take
+    no action this round. The main profile is tried again next round."""
+    clock = state["clock"]
+    try:
+        return planner.decide(state)
+    except Exception as e:  # noqa: BLE001 - any strategy failure falls back
+        planner.wakeup = None
+        if fallback is None:
+            log.decision(clock, "ERROR", None, None,
+                         f"{planner.profile} strategy crashed ({type(e).__name__}: {e}); "
+                         "taking no action this round")
+            return []
+        log.decision(clock, "ERROR", None, None,
+                     f"{planner.profile} strategy crashed ({type(e).__name__}: {e}); "
+                     f"deciding this round with {fallback.profile} instead")
+    try:
+        return fallback.decide(state)
+    except Exception as e:  # noqa: BLE001
+        log.decision(clock, "ERROR", None, None,
+                     f"{fallback.profile} fallback also crashed ({type(e).__name__}: {e}); "
+                     "taking no action this round")
+        return []
+
+
 def run(client, planner: Planner, log: DecisionLog, label: str = "planner",
         pace: float = 0.0) -> dict | None:
     """Play the scenario to the horizon. `pace` sleeps that many seconds after
@@ -88,6 +115,8 @@ def run(client, planner: Planner, log: DecisionLog, label: str = "planner",
               f"re-run with --reset to restart the scenario", file=sys.stderr)
         return None
     seen = 0                                # engine log lines already echoed
+    # used only for a round where the main strategy crashes
+    fallback = Planner(PROFILES[0], log) if planner.profile != PROFILES[0] else None
 
     def echo_events(st: dict) -> int:
         for entry in st["log"][seen:]:
@@ -105,7 +134,7 @@ def run(client, planner: Planner, log: DecisionLog, label: str = "planner",
         # before letting the clock move.
         for _ in range(5):
             instant = False
-            for action in planner.decide(state):
+            for action in safe_decide(planner, fallback, log, state):
                 res = apply_action(client, planner, log, clock, action)
                 if res and res.get("arrival_hour") == clock:
                     instant = True

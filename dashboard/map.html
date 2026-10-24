@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REC 2026 Live Map</title>
+<style>
+/* Full-width map with a thin status bar above and subtitles below.
+   Canvas drawing; colours come from the same tokens as the dashboard. System fonts only (offline). */
+:root {
+  --bg: #f4f5f2;
+  --surface: #ffffff;
+  --fg: #1d2327;
+  --muted: #5d6970;
+  --line: #b9c1bc;
+  --grid: #e9ece9;
+  --accent: #b9410f;
+  --incident: #2f6fb0;
+  --care: #8a4fb8;
+  --move: #6f7d85;
+  --ok: #2c7a4b;
+  --bad: #c0352b;
+  --warn: #a06c00;
+  --font-body: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121618; --surface: #1a2023; --fg: #e3e7e5; --muted: #98a4aa; --line: #45525a; --grid: #222a2d;
+    --accent: #f08a50; --incident: #6aa6e4; --care: #c08ae6; --move: #9aa6ad;
+    --ok: #63c08b; --bad: #f07368; --warn: #e2b450;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121618; --surface: #1a2023; --fg: #e3e7e5; --muted: #98a4aa; --line: #45525a; --grid: #222a2d;
+  --accent: #f08a50; --incident: #6aa6e4; --care: #c08ae6; --move: #9aa6ad;
+  --ok: #63c08b; --bad: #f07368; --warn: #e2b450;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 var(--font-body); display: flex; flex-direction: column; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; justify-content: space-between; padding: 12px max(16px, 2vw); border-bottom: 1px solid var(--line); background: var(--surface); }
+.bar h1 { margin: 0; font-size: 18px; font-weight: 700; }
+.eyebrow { font: 600 11px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: baseline; font-variant-numeric: tabular-nums; }
+.stat b { font-size: 20px; }
+.stat span { color: var(--muted); font-size: 13px; }
+.status { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.done { background: var(--accent); }
+a.back { color: var(--fg); text-decoration: none; border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; font-size: 13px; }
+a.back:hover, a.back:focus-visible { border-color: var(--accent); outline: none; }
+.stage { position: relative; flex: 1 1 auto; min-height: 380px; }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.legend { position: absolute; left: max(16px, 2vw); top: 12px; display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); background: color-mix(in srgb, var(--surface) 85%, transparent); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.legend i { display: inline-block; width: 18px; height: 0; border-top: 3px solid var(--c); margin-right: 6px; vertical-align: middle; }
+.legend i.dash { border-top-style: dashed; }
+.legend i.round { width: 10px; height: 10px; border: 0; border-radius: 50%; background: var(--c); margin-right: 10px; }
+.subs { padding: 10px max(16px, 2vw) 14px; border-top: 1px solid var(--line); background: var(--surface); min-height: 76px; display: grid; gap: 4px; }
+.sub { display: grid; grid-template-columns: 96px 120px minmax(0, 1fr); gap: 10px; font-size: 16px; }
+.sub.old { opacity: .5; font-size: 14px; }
+.sub .h { font-family: var(--font-mono); color: var(--muted); font-size: 13px; padding-top: 2px; }
+.sub .k { font: 700 12.5px var(--font-mono); color: var(--accent); padding-top: 2px; }
+.sub .k.bad { color: var(--bad); }
+.sub .t { min-width: 0; overflow-wrap: anywhere; }
+.sub .w { font-family: var(--font-mono); font-size: 13.5px; margin-right: 6px; }
+.empty { color: var(--muted); font-size: 14px; }
+@media (max-width: 640px) { .sub { grid-template-columns: 1fr; gap: 0; } .legend { display: none; } }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div>
+    <div class="eyebrow">REC 2026 · Live map</div>
+    <h1 id="scenario">Waiting for the engine</h1>
+  </div>
+  <div class="stats" aria-live="polite">
+    <div class="stat"><b id="sDay">-</b> <span id="sHour"></span></div>
+    <div class="stat"><b id="sSaved">-</b> <span>people saved</span></div>
+    <div class="stat"><b id="sCare">-</b> <span>care residents</span></div>
+    <div class="stat"><b id="sOpen">-</b> <span>open incidents</span></div>
+  </div>
+  <div class="status"><span class="dot" id="dot"></span><span id="status">Connecting...</span><a class="back" href="./">Numbers view</a></div>
+</header>
+
+<div class="stage" id="stage">
+  <canvas id="map" role="img" aria-label="Live map of the road network, vehicles, incidents and the care home"></canvas>
+  <div class="legend" aria-hidden="true">
+    <div><i style="--c: var(--line)"></i>open road</div>
+    <div><i class="dash" style="--c: var(--warn)"></i>restricted (×1.5)</div>
+    <div><i style="--c: var(--bad)"></i>closed</div>
+    <div><i class="round" style="--c: var(--incident)"></i>to an incident</div>
+    <div><i class="round" style="--c: var(--care)"></i>care-home trip</div>
+    <div><i class="round" style="--c: var(--move)"></i>repositioning</div>
+    <div><i class="round" style="--c: var(--bad)"></i>incident ring: shrinks to its deadline</div>
+  </div>
+</div>
+
+<div class="subs" id="subs"><div class="empty">The planner's latest decisions appear here.</div></div>
+
+<script>
+"use strict";
+const DEFAULT_ENGINE = "http://127.0.0.1:8600";
+const RESTRICTED = 1.5;
+const TRAIL_MS = 1400;
+const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+let engineUrl = null;
+let state = null, report = null;
+let layoutKey = "", pos = {};                 // location id -> {x, y} in layout units
+let view = { scale: 1, ox: 0, oy: 0 };       // layout units -> CSS pixels
+let colors = {};
+let shownClock = 0, animFrom = 0, animTo = 0, animStart = 0, animDur = 1;
+const tracks = {};                            // vehicle id -> {queue: [mission...], trail: [], flash}
+const effects = [];                           // bursts and flashes
+let prevInc = {}, prevCare = null;
+let decisions = [], decFile = "", decNext = 0;
+
+// ------------------------------------------------------------------ helpers
+
+const hh = h => "H" + String(h).padStart(4, "0");
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const ease = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ["bg", "surface", "fg", "muted", "line", "grid", "accent", "incident", "care", "move", "ok", "bad", "warn"]) {
+    colors[k] = cs.getPropertyValue("--" + k).trim();
+  }
+}
+function alpha(color, a) {                    // hex or rgb() -> rgba()
+  if (color.startsWith("#")) {
+    let h = color.slice(1);
+    if (h.length === 3) h = h.split("").map(c => c + c).join("");
+    const n = parseInt(h, 16);
+    return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+  }
+  const m = color.match(/[\d.]+/g) || [0, 0, 0];
+  return `rgba(${m[0]},${m[1]},${m[2]},${a})`;
+}
+async function getJson(url, ms = 2500) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try {
+    const res = await fetch(url, { signal: ctl.signal, cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } finally { clearTimeout(t); }
+}
+
+// ------------------------------------------------------------------ graph
+
+function roadHours(r) { return r.hours * (r.status === "restricted" ? RESTRICTED : 1); }
+
+function adjacency(roads, useStatus) {
+  const adj = {};
+  roads.forEach(r => {
+    if (useStatus && r.status === "closed") return;
+    const w = useStatus ? roadHours(r) : r.hours;
+    (adj[r.from_location_id] ||= []).push([r.to_location_id, w]);
+    (adj[r.to_location_id] ||= []).push([r.from_location_id, w]);
+  });
+  return adj;
+}
+
+function dijkstra(adj, start) {                // -> {dist, prev}
+  const dist = { [start]: 0 }, prev = {}, done = new Set();
+  for (;;) {
+    let u = null;
+    for (const k in dist) if (!done.has(k) && (u === null || dist[k] < dist[u])) u = k;
+    if (u === null) break;
+    done.add(u);
+    for (const [v, w] of adj[u] || []) {
+      const nd = dist[u] + w;
+      if (dist[v] === undefined || nd < dist[v]) { dist[v] = nd; prev[v] = u; }
+    }
+  }
+  return { dist, prev };
+}
+
+function routePath(roads, from, to) {         // node list along the current shortest route
+  const { prev } = dijkstra(adjacency(roads, true), from);
+  if (from !== to && prev[to] === undefined) return [from, to];
+  const path = [to];
+  while (path[0] !== from) path.unshift(prev[path[0]]);
+  return path;
+}
+
+// Layout: no coordinates in the scenario, so place locations so that straight-line
+// distance tracks travel hours (stress majorization over shortest-path hours).
+function computeLayout(locs, roads) {
+  const ids = locs.map(l => l.id);
+  const adj = adjacency(roads, false);
+  const D = ids.map(a => { const { dist } = dijkstra(adj, a); return ids.map(b => dist[b]); });
+  let maxD = 0;
+  D.forEach(row => row.forEach(d => { if (d !== undefined && d > maxD) maxD = d; }));
+  D.forEach(row => row.forEach((d, j) => { if (d === undefined) row[j] = maxD * 1.3 || 1; }));
+  const n = ids.length;
+  let P = ids.map((_, i) => ({ x: Math.cos(2 * Math.PI * i / n) * maxD / 2, y: Math.sin(2 * Math.PI * i / n) * maxD / 2 }));
+  for (let it = 0; it < 400; it++) {
+    const next = P.map((p, i) => {
+      let sx = 0, sy = 0, sw = 0;
+      for (let j = 0; j < n; j++) {
+        if (i === j || !D[i][j]) continue;
+        const w = 1 / (D[i][j] * D[i][j]);
+        const dx = p.x - P[j].x, dy = p.y - P[j].y;
+        const cur = Math.hypot(dx, dy) || 1e-6;
+        sx += w * (P[j].x + D[i][j] * dx / cur);
+        sy += w * (P[j].y + D[i][j] * dy / cur);
+        sw += w;
+      }
+      return sw ? { x: sx / sw, y: sy / sw } : p;
+    });
+    P = next;
+  }
+  // landscape orientation: rotate so the widest spread runs left-right
+  let cx = 0, cy = 0; P.forEach(p => { cx += p.x / n; cy += p.y / n; });
+  let sxx = 0, syy = 0, sxy = 0;
+  P.forEach(p => { const dx = p.x - cx, dy = p.y - cy; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; });
+  const ang = -0.5 * Math.atan2(2 * sxy, sxx - syy);
+  const out = {};
+  ids.forEach((id, i) => {
+    const dx = P[i].x - cx, dy = P[i].y - cy;
+    out[id] = { x: dx * Math.cos(ang) - dy * Math.sin(ang), y: dx * Math.sin(ang) + dy * Math.cos(ang) };
+  });
+  return out;
+}
+
+function fitView(w, h) {
+  const pts = Object.values(pos);
+  if (!pts.length) return;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  pts.forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); });
+  const padX = Math.min(170, w * 0.16), padTop = 70, padBottom = 60;
+  const sw = Math.max(1, maxX - minX), sh = Math.max(1, maxY - minY);
+  const scale = Math.min((w - 2 * padX) / sw, (h - padTop - padBottom) / sh);
+  view = { scale, ox: padX + ((w - 2 * padX) - sw * scale) / 2 - minX * scale, oy: padTop + ((h - padTop - padBottom) - sh * scale) / 2 - minY * scale };
+}
+const px = id => { const p = pos[id] || { x: 0, y: 0 }; return { x: view.ox + p.x * view.scale, y: view.oy + p.y * view.scale }; };
+
+// ------------------------------------------------------------------ polling
+
+async function poll() {
+  try {
+    const [st, rep] = await Promise.all([getJson(engineUrl + "/state"), getJson(engineUrl + "/report")]);
+    ingest(st.state, rep.report);
+    const fin = st.state.clock >= st.state.horizon_hours;
+    setStatus(fin ? "done" : "ok", fin ? "Run finished" : "Live");
+  } catch (e) {
+    setStatus("bad", `No engine at ${engineUrl}`);
+  }
+  if (location.protocol !== "file:") {
+    try {
+      const d = await getJson(`decisions?file=${encodeURIComponent(decFile)}&since=${decNext}`);
+      if (d.reset) decisions = [];
+      decFile = d.file || ""; decNext = d.next || 0;
+      d.records.forEach(r => { if (r.type === "decision" || (r.type === "event" && (r.kind === "incident_missed" || r.kind === "chronic_loss"))) decisions.push(r); });
+      if (decisions.length > 300) decisions = decisions.slice(-300);
+      renderSubs();
+    } catch (e) { /* captions are optional */ }
+  }
+  setTimeout(poll, 700);
+}
+
+function setStatus(kind, text) {
+  document.getElementById("dot").className = "dot " + kind;
+  document.getElementById("status").textContent = text;
+}
+
+function ingest(st, rep) {
+  const now = performance.now();
+  const key = st.scenario_id + "|" + st.locations.map(l => l.id).join(",") + "|" + st.roads.map(r => `${r.id}:${r.hours}`).join(",");
+  if (key !== layoutKey) {                      // new scenario: fresh layout and history
+    layoutKey = key;
+    pos = computeLayout(st.locations, st.roads);
+    for (const k in tracks) delete tracks[k];
+    prevInc = {}; prevCare = null; effects.length = 0;
+    shownClock = animFrom = animTo = st.clock;
+    resize();
+  }
+  if (state && st.clock < state.clock) {        // engine was reset
+    for (const k in tracks) delete tracks[k];
+    prevInc = {}; prevCare = null;
+    shownClock = animFrom = animTo = st.clock;
+  }
+  if (st.clock !== animTo) {
+    animFrom = shownClock; animTo = st.clock; animStart = now;
+    animDur = reduceMotion ? 1 : clamp((animTo - animFrom) * 140, 350, 650);
+  }
+
+  // vehicles: queue missions so a trip that ended between polls still glides to its end
+  st.vehicles.forEach(v => {
+    const t = tracks[v.id] ||= { queue: [], trail: [], last: null };
+    const m = v.mission;
+    if (m) {
+      const k = `${m.depart}|${m.target}|${m.arrival}`;
+      if (!t.queue.some(q => q.key === k)) {
+        t.queue.push({ ...m, key: k, path: routePath(st.roads, m.origin, m.target), job: jobOf(v.id, m, st) });
+      }
+    }
+    // a queued mission that is gone before its arrival hour was cancelled or force-cancelled
+    t.queue = t.queue.filter(q => {
+      const live = m && q.key === `${m.depart}|${m.target}|${m.arrival}`;
+      if (live || q.arrival <= st.clock) return true;
+      const broke = v.status === "out_of_service";
+      effects.push({ kind: "flash", at: q.origin, color: broke ? colors.bad : colors.muted, t0: now, dur: 1400,
+                     label: broke ? `${v.id} broke down` : `${v.id} cancelled` });
+      t.trail = [];
+      return false;
+    });
+    t.status = v.status; t.loc = v.location_id; t.speed = v.speed;
+  });
+
+  // incidents: bursts on outcome
+  st.incidents.forEach(i => {
+    const was = prevInc[i.id];
+    if (was === "open" && i.status === "resolved") effects.push({ kind: "burst", at: i.location_id, color: colors.ok, t0: now, dur: 1600, label: `+${i.people_at_risk} saved` });
+    if (was === "open" && i.status === "missed") effects.push({ kind: "burst", at: i.location_id, color: colors.muted, t0: now, dur: 2200, label: `${i.people_at_risk} lost` });
+    prevInc[i.id] = i.status;
+  });
+
+  // care home: refill on a new visit, red flash on a loss
+  const c = st.chronic;
+  if (c && prevCare) {
+    if (c.last_visit !== prevCare.last_visit) effects.push({ kind: "burst", at: c.location_id, color: colors.care, t0: now, dur: 1200, label: "visit" });
+    if (c.people_remaining < prevCare.people_remaining) effects.push({ kind: "flash", at: c.location_id, color: colors.bad, t0: now, dur: 1800, label: `-${prevCare.people_remaining - c.people_remaining} residents` });
+  }
+  prevCare = c ? { ...c } : null;
+
+  state = st; report = rep;
+  renderBar();
+}
+
+function jobOf(vid, m, st) {
+  if (m.kind === "incident") return "incident";
+  const care = st.chronic && st.chronic.location_id;
+  if (care && m.target === care) return "care";
+  for (let i = decisions.length - 1; i >= 0; i--) {
+    const d = decisions[i];
+    if (d.type === "decision" && d.vehicle === vid) return d.action.startsWith("CARE") ? "care" : "move";
+  }
+  return "move";
+}
+
+function renderBar() {
+  const st = state, rep = report;
+  document.getElementById("scenario").textContent = `${st.title || st.scenario_id}`;
+  const days = st.horizon_hours / 24;
+  document.getElementById("sDay").textContent = `Day ${Math.min(st.day, days)}/${days}`;
+  document.getElementById("sHour").textContent = hh(st.clock);
+  document.getElementById("sSaved").textContent = `${rep.people_saved_total}/${rep.people_at_risk_total}`;
+  document.getElementById("sCare").textContent = st.chronic ? `${st.chronic.people_remaining}/${st.chronic.initial_people}` : "-";
+  document.getElementById("sOpen").textContent = String(st.incidents.filter(i => i.status === "open").length);
+}
+
+function renderSubs() {
+  const box = document.getElementById("subs");
+  const last = decisions.slice(-2).reverse();
+  if (!last.length) return;
+  box.replaceChildren(...last.map((d, i) => {
+    const row = document.createElement("div");
+    row.className = "sub" + (i ? " old" : "");
+    const isDec = d.type === "decision";
+    const kind = isDec ? d.action : d.kind;
+    const h = document.createElement("div"); h.className = "h"; h.textContent = `${hh(d.hour)} d${String(Math.floor(d.hour / 24) + 1).padStart(2, "0")}`;
+    const k = document.createElement("div"); k.className = "k" + (/REJECTED|ERROR|WARNING|missed|loss/.test(kind) ? " bad" : ""); k.textContent = kind;
+    const t = document.createElement("div"); t.className = "t";
+    const who = isDec ? [d.vehicle, d.target].filter(Boolean).join(" -> ") : "";
+    if (who) { const w = document.createElement("span"); w.className = "w"; w.textContent = who; t.append(w); }
+    t.append(document.createTextNode(isDec ? (d.reason || "") : (d.text || "")));
+    row.append(h, k, t);
+    return row;
+  }));
+}
+
+// ------------------------------------------------------------------ drawing
+
+const canvas = document.getElementById("map");
+const ctx = canvas.getContext("2d");
+let W = 0, H = 0;
+function resize() {
+  const r = document.getElementById("stage").getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  W = r.width; H = r.height;
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  fitView(W, H);
+}
+
+function pointAlong(path, roads, f) {          // f in [0,1] of travel hours along the route
+  const segs = [];
+  let total = 0;
+  for (let i = 0; i + 1 < path.length; i++) {
+    const r = roads.find(r => (r.from_location_id === path[i] && r.to_location_id === path[i + 1]) || (r.to_location_id === path[i] && r.from_location_id === path[i + 1]));
+    const w = r ? roadHours(r) : 1;
+    segs.push(w); total += w;
+  }
+  if (!segs.length) return px(path[0]);
+  let target = clamp(f, 0, 1) * total;
+  for (let i = 0; i < segs.length; i++) {
+    if (target <= segs[i] || i === segs.length - 1) {
+      const a = px(path[i]), b = px(path[i + 1]);
+      const t = segs[i] ? clamp(target / segs[i], 0, 1) : 1;
+      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+    }
+    target -= segs[i];
+  }
+  return px(path[path.length - 1]);
+}
+
+function vehicleSpots(clock) {
+  const out = [];
+  const parked = {};
+  for (const [id, t] of Object.entries(tracks)) {
+    t.queue = t.queue.filter(q => q.arrival > clock);      // finished trips drop out once shown
+    const q = t.queue.find(q => clock >= q.depart - 1e-9 && clock < q.arrival);
+    if (q) {
+      if (q.kind === "move" && q.job === "move") q.job = jobOf(id, q, state);   // its decision may arrive late
+      const f = q.arrival > q.depart ? (clock - q.depart) / (q.arrival - q.depart) : 1;
+      out.push({ id, ...pointAlong(q.path, state.roads, f), job: q.job, moving: true, status: t.status, t });
+    } else {
+      const waiting = t.queue[0];
+      const at = waiting && clock < waiting.depart ? waiting.origin : t.loc;
+      (parked[at] ||= []).push({ id, t, at });
+    }
+  }
+  for (const [at, list] of Object.entries(parked)) {
+    const c = px(at);
+    list.forEach((p, i) => {
+      const a = -Math.PI / 2 + (i - (list.length - 1) / 2) * 0.55;
+      const r = 26;
+      out.push({ id: p.id, x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r, job: null, moving: false, status: p.t.status, t: p.t });
+    });
+  }
+  return out;
+}
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  ctx.clearRect(0, 0, W, H);
+  if (!state) {
+    ctx.fillStyle = colors.muted; ctx.font = `15px ${getComputedStyle(document.body).fontFamily}`;
+    ctx.textAlign = "center";
+    ctx.fillText("Start the engine (python -m engine.server --port 8600) to see the map.", W / 2, H / 2);
+    return;
+  }
+  const p = animDur ? clamp((now - animStart) / animDur, 0, 1) : 1;
+  shownClock = animFrom + (animTo - animFrom) * ease(p);
+  const font = getComputedStyle(document.body).fontFamily;
+  const mono = "Consolas, ui-monospace, monospace";
+  const pulse = reduceMotion ? 0.5 : 0.5 + 0.5 * Math.sin(now / 260);
+
+  // roads
+  state.roads.forEach(r => {
+    const a = px(r.from_location_id), b = px(r.to_location_id);
+    ctx.save();
+    ctx.lineWidth = r.status === "open" ? 4 : 4.5;
+    ctx.strokeStyle = r.status === "closed" ? colors.bad : r.status === "restricted" ? colors.warn : colors.line;
+    if (r.status === "restricted") ctx.setLineDash([10, 8]);
+    if (r.status === "closed") ctx.globalAlpha = 0.75;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.restore();
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    if (r.status === "closed") {
+      ctx.save(); ctx.strokeStyle = colors.bad; ctx.lineWidth = 3.5;
+      ctx.beginPath(); ctx.moveTo(mx - 8, my - 8); ctx.lineTo(mx + 8, my + 8); ctx.moveTo(mx + 8, my - 8); ctx.lineTo(mx - 8, my + 8); ctx.stroke();
+      ctx.restore();
+    } else {
+      const label = r.status === "restricted" ? `${r.hours}h ×1.5` : `${r.hours}h`;
+      ctx.font = `12px ${mono}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const w = ctx.measureText(label).width + 8;
+      ctx.fillStyle = colors.bg; ctx.fillRect(mx - w / 2, my - 9, w, 18);
+      ctx.fillStyle = r.status === "restricted" ? colors.warn : colors.muted; ctx.fillText(label, mx, my);
+    }
+  });
+
+  // care-home ring: coverage drains between visits (a visit at hour v covers ticks up to v + interval)
+  const c = state.chronic;
+  if (c) {
+    const at = px(c.location_id);
+    const coverEnd = c.last_visit >= 0 ? c.last_visit + c.interval_hours : 0;
+    const frac = clamp((coverEnd - shownClock) / c.interval_hours, 0, 1);
+    const ringColor = c.people_remaining <= 0 ? colors.muted : frac > 0.34 ? colors.care : frac > 0 ? colors.warn : colors.bad;
+    ctx.save();
+    ctx.lineWidth = 7; ctx.strokeStyle = alpha(colors.care, 0.16);
+    ctx.beginPath(); ctx.arc(at.x, at.y, 34, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = ringColor; ctx.lineCap = "round";
+    if (frac > 0) { ctx.beginPath(); ctx.arc(at.x, at.y, 34, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2); ctx.stroke(); }
+    // tick mark: where the next tick falls on the 24h dial
+    const toTick = clamp((c.next_tick - shownClock) / c.interval_hours, 0, 1);
+    const ta = -Math.PI / 2 + toTick * Math.PI * 2;
+    ctx.lineWidth = 2.5; ctx.strokeStyle = colors.fg;
+    ctx.beginPath(); ctx.moveTo(at.x + Math.cos(ta) * 28, at.y + Math.sin(ta) * 28); ctx.lineTo(at.x + Math.cos(ta) * 41, at.y + Math.sin(ta) * 41); ctx.stroke();
+    ctx.restore();
+    ctx.font = `600 12px ${font}`; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = ringColor;
+    ctx.fillText(`${c.people_remaining}/${c.initial_people} residents · tick ${hh(c.next_tick)}`, at.x, at.y + 58);
+  }
+
+  // incidents: rings shrink as the deadline approaches
+  const openByLoc = {};
+  state.incidents.filter(i => i.status === "open").forEach(i => (openByLoc[i.location_id] ||= []).push(i));
+  for (const [loc, list] of Object.entries(openByLoc)) {
+    const at = px(loc);
+    list.sort((a, b) => a.deadline - b.deadline).forEach((i, k) => {
+      const span = Math.max(1, i.deadline - i.created_at);
+      const left = clamp((i.deadline - shownClock) / span, 0, 1);
+      const r = 18 + 26 * left + k * 6;
+      const col = i.assigned_vehicle_id ? colors.incident : colors.bad;
+      ctx.save();
+      ctx.lineWidth = 3 + 2 * pulse;
+      ctx.strokeStyle = alpha(col, 0.45 + 0.5 * pulse);
+      ctx.beginPath(); ctx.arc(at.x, at.y, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+      ctx.font = `700 12.5px ${font}`; ctx.textAlign = "center"; ctx.fillStyle = col;
+      ctx.fillText(`${i.id} · ${i.people_at_risk} people · ${Math.max(0, i.deadline - state.clock)}h`, at.x, at.y - r - 8 - k * 15);
+    });
+  }
+
+  // locations
+  state.locations.forEach(l => {
+    const at = px(l.id);
+    const isCare = c && l.id === c.location_id;
+    ctx.beginPath(); ctx.arc(at.x, at.y, isCare ? 13 : 10, 0, Math.PI * 2);
+    ctx.fillStyle = colors.surface; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = isCare ? colors.care : colors.fg; ctx.stroke();
+    ctx.font = `600 13.5px ${font}`; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = colors.fg;
+    const below = isCare ? 76 : 30;
+    ctx.fillText(l.name, at.x, at.y + below);
+    ctx.font = `11px ${mono}`; ctx.fillStyle = colors.muted;
+    ctx.fillText(l.id, at.x, at.y + below + 14);
+  });
+
+  // vehicles with trails
+  vehicleSpots(shownClock).forEach(v => {
+    const t = v.t;
+    const col = v.status === "out_of_service" ? colors.bad : v.job === "incident" ? colors.incident : v.job === "care" ? colors.care : v.job === "move" ? colors.move : colors.fg;
+    if (v.moving) {
+      t.trail.push({ x: v.x, y: v.y, at: now });
+    }
+    t.trail = t.trail.filter(q => now - q.at < TRAIL_MS);
+    for (let i = 1; i < t.trail.length; i++) {
+      const a = t.trail[i - 1], b = t.trail[i];
+      ctx.strokeStyle = alpha(col, 0.5 * (1 - (now - b.at) / TRAIL_MS));
+      ctx.lineWidth = 5; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(v.x, v.y, 9, 0, Math.PI * 2);
+    if (v.status === "out_of_service") {
+      ctx.fillStyle = colors.surface; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = colors.bad; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(v.x - 4, v.y - 4); ctx.lineTo(v.x + 4, v.y + 4); ctx.moveTo(v.x + 4, v.y - 4); ctx.lineTo(v.x - 4, v.y + 4); ctx.stroke();
+    } else {
+      ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = colors.surface; ctx.stroke();
+    }
+    ctx.font = `700 11px ${mono}`; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillStyle = colors.fg;
+    ctx.fillText(v.id.replace(/^VEH-/, ""), v.x + 13, v.y);
+  });
+
+  // effects: bursts (save / miss / visit) and flashes (breakdown / cancel / care loss)
+  for (let i = effects.length - 1; i >= 0; i--) {
+    const e = effects[i];
+    const k = (now - e.t0) / e.dur;
+    if (k >= 1) { effects.splice(i, 1); continue; }
+    const at = px(e.at);
+    ctx.save();
+    if (e.kind === "burst") {
+      ctx.strokeStyle = alpha(e.color, 1 - k); ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(at.x, at.y, 14 + 60 * ease(k), 0, Math.PI * 2); ctx.stroke();
+    } else {
+      ctx.fillStyle = alpha(e.color, 0.35 * (1 - k));
+      ctx.beginPath(); ctx.arc(at.x, at.y, 46, 0, Math.PI * 2); ctx.fill();
+    }
+    if (e.label) {
+      ctx.font = `700 14px ${font}`; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+      ctx.fillStyle = alpha(e.color, 1 - k * k);
+      ctx.fillText(e.label, at.x, at.y - 50 - 20 * k);
+    }
+    ctx.restore();
+  }
+}
+
+// ------------------------------------------------------------------ start
+
+async function start() {
+  readColors();
+  engineUrl = DEFAULT_ENGINE;
+  if (location.protocol !== "file:") {
+    try { engineUrl = (await getJson("api/config")).engine || DEFAULT_ENGINE; } catch (e) { /* keep default */ }
+  }
+  resize();
+  window.addEventListener("resize", resize);
+  if (window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readColors);
+  new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  requestAnimationFrame(frame);
+  poll();
+}
+start();
+</script>
+</body>
+</html>

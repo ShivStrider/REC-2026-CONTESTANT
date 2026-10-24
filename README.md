@@ -70,6 +70,9 @@ vehicle and its target (an incident or a location), and why the planner
 chose it. Lines marked `engine` are what the engine reported in between,
 such as an incident opening or a care-home tick. `REJECTED` means the
 engine refused an action; the planner logs it and replans next round.
+`ERROR` means the strategy itself crashed in that round. The planner then
+decides that round with `basic` instead and tries the chosen profile again
+next round, so a bug never stops a run before the end of the scenario.
 
 ### Planner options
 
@@ -110,7 +113,7 @@ server, and prints one row per scenario and profile. Every row must say
 | `solutions/client.py` | The organisers' HTTP client |
 | `tools/bench.py` | Offline comparison of profiles across scenarios |
 | `tools/local_engine.py` | In-process stand-in for the HTTP engine |
-| `dashboard/` | Live and replay dashboard: `index.html` and the `serve.py` that serves it |
+| `dashboard/` | Live and replay dashboard (`index.html`), live map (`map.html`), and the `serve.py` that serves them |
 
 ## Reading the dashboard
 
@@ -132,6 +135,26 @@ Dashboard options: `--port` (default 8700), `--engine-host` and
   and the vehicle responding.
 - **Latest planner decisions:** the last 30 decisions with their reasons,
   plus missed deadlines and care-home losses.
+
+### Live map
+
+Open it from the **Live map** button, or at http://127.0.0.1:8700/map.
+
+- **Roads:** the scenario has no coordinates, so locations are placed so
+  that distance on screen follows travel hours. Each road shows its hours.
+  Restricted roads are dashed and marked ×1.5; closed roads are red with
+  an ✕.
+- **Vehicles:** dots that move along their actual route, coloured by job:
+  blue to an incident, purple for a care-home trip, grey for
+  repositioning. A cancelled trip, or a breakdown, shows as a flash where
+  the trip started, which is where the engine puts the vehicle back. A
+  vehicle out of service is drawn as a red ✕.
+- **Incidents:** a pulsing ring that shrinks as the deadline gets closer,
+  red while no vehicle is assigned and blue once one is on the way. A save
+  bursts green; a miss bursts grey.
+- **Care home:** a 24-hour dial that drains as the last visit's cover runs
+  out and refills when a vehicle arrives. The black mark is the next tick.
+- **Captions:** the planner's last two decisions and their reasons.
 
 ### Replay a run
 
