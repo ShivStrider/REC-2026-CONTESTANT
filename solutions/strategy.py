@@ -43,7 +43,6 @@ REPOSITION_MAX_HOURS = 10    # never send an idle vehicle on a longer reposition
 PRIOR_PEOPLE = 3.0           # every location starts as if 3 people had been at risk there
 PRIOR_DEADLINES = (4, 6, 8, 10, 12, 16)  # assumed deadline lengths before any are seen
 
-
 @dataclass
 class Action:
     kind: str                # "dispatch" | "move" | "cancel"
@@ -170,6 +169,7 @@ class Planner:
         self.sent: dict[str, str] = {}          # incident -> vehicle we dispatched
         self.noted: set[tuple] = set()          # one-off notes already logged
         self._hold_deadline: dict[str, int] = {}  # vehicle -> care tick it must reach
+        self._searched: set[str] = set()        # task ids the last search considered
 
     # -- bookkeeping ---------------------------------------------------------
 
@@ -396,7 +396,11 @@ class Planner:
         # Accept only if the whole plan then saves strictly more people than
         # keeping the commitment. Sunk hours are already priced in, because
         # the cancelled vehicle restarts from its origin at the current hour.
+        self._searched = {t.id for t in base_tasks}
+        planned = {leg.task.id for legs in plan.routes.values() for leg in legs}
+        left_out = [t for t in base_tasks if not t.care and t.id not in planned]
         cancel = None
+        considered = []
         for r in base_res:
             if r.mode != "busy":
                 continue
@@ -408,13 +412,25 @@ class Planner:
             need = world.care_need(exclude_vehicle=r.vid)
             tasks = self._tasks(world, need, freed=m.get("incident_id"))
             alt = self._search(world, res, tasks, need)
+            considered.append((r.vid, m, alt.value, keep_value))
             if alt.value > keep_value and (cancel is None or alt.value - keep_value > cancel[2]):
-                cancel = (r.vid, alt, alt.value - keep_value, keep_value, need)
+                cancel = (r.vid, alt, alt.value - keep_value, keep_value, need, tasks)
+
+        # Cancel consciously rejected: when an incident is going unserved, say
+        # (once per mission) why no committed vehicle was pulled off its trip.
+        if left_out and not cancel:
+            for vid, m, alt_value, keep_value in considered:
+                what = m["incident_id"] or f"move to {m['target']}"
+                self._note(("keep", vid, m["depart"], m["target"]), world.clock, "KEEP",
+                           f"considered cancelling {vid} ({what}) for "
+                           f"{', '.join(t.id for t in left_out)}: replanned schedule would save "
+                           f"{alt_value} vs {keep_value} if kept -> keep the commitment")
 
         actions: list[Action] = []
         need = base_need
         if cancel:
-            vid, plan, gain, keep_value, need = cancel
+            vid, plan, gain, keep_value, need, tasks = cancel
+            self._searched = {t.id for t in tasks}
             m = world.vehicles[vid]["mission"]
             what = m["incident_id"] or f"move to {m['target']}"
             actions.append(Action(
@@ -460,11 +476,14 @@ class Planner:
             i = world.incidents[freed]
             if i["status"] == "open":
                 tasks.append(Task(i["id"], i["location_id"], i["deadline"], i["people_at_risk"]))
+        tasks.sort(key=lambda t: (t.deadline, -t.value))
+        # the care visit is always considered; incidents fill the remaining slots
+        tasks = tasks[:MAX_SEARCH_TASKS - (need is not None)]
         if need is not None:
             tasks.append(Task("CARE", world.care_loc, need.tick, need.value,
                               care=True, window_start=need.window_start))
-        tasks.sort(key=lambda t: (t.deadline, -t.value))
-        return tasks[:MAX_SEARCH_TASKS]
+            tasks.sort(key=lambda t: (t.deadline, -t.value))
+        return tasks
 
     def _leg(self, world: World, r: Resource, t: int, loc: str, task: Task) -> Leg | None:
         if task.care:
@@ -486,9 +505,13 @@ class Planner:
         cur = {r.vid: (r.ready_t, r.ready_loc) for r in resources}
         routes: dict[str, list[Leg]] = {r.vid: [] for r in resources}
         n = len(tasks)
+        # suffix[i] = most people tasks i.. could still add (the bound used to prune).
+        # An incident at the care home can also earn the care bonus, so count it.
+        care_bonus = need.value if need else 0
         suffix = [0] * (n + 1)
         for i in range(n - 1, -1, -1):
-            suffix[i] = suffix[i + 1] + tasks[i].value
+            at_home = not tasks[i].care and tasks[i].loc == world.care_loc
+            suffix[i] = suffix[i + 1] + tasks[i].value + (care_bonus if at_home else 0)
         nodes = 0
 
         def dfs(i: int, value: int, travel: int, care_done: bool) -> None:
@@ -597,7 +620,12 @@ class Planner:
                 h = world.hours(r.ready_loc, inc["location_id"], r.speed)
                 if h is not None and r.ready_t + h <= inc["deadline"]:
                     reachable = True
-            if not reachable:
+            if inc["id"] not in self._searched and reachable:
+                self._note(("deferred", inc["id"]), world.clock, "DEFERRED",
+                           f"{inc['id']} ({inc['people_at_risk']} people, deadline H{inc['deadline']}) "
+                           f"not planned this round: only the {MAX_SEARCH_TASKS} earliest-deadline "
+                           f"tasks are searched; it is reconsidered next round")
+            elif not reachable:
                 self._note(("unreachable", inc["id"]), world.clock, "UNREACHABLE",
                            f"{inc['id']} ({inc['people_at_risk']} people, deadline "
                            f"H{inc['deadline']}) at {world.name(inc['location_id'])}: no vehicle "
